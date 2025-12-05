@@ -1,0 +1,43 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.db
+*.sqlite3
+
+# Virtual environment
+.env
+.venv/
+env/
+venv/
+ENV/
+
+# ---- FastAPI / General ----
+*.log
+*.pid
+*.out
+*.gz
+
+# ---- IDE / Editors ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- OS files ----
+.DS_Store
+Thumbs.db
+
+# ---- Pytest / Coverage ----
+.coverage
+htmlcov/
+.cache/
+.pytest_cache/
+*.pytest_cache/
+
+# ---- Environment variables ----
+.env.local
+.env.*
+

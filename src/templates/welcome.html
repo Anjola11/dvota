@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Dvota</title>
+  <style>
+    /* Modern font stack */
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+    
+    /* Card container with shadow */
+    .container { background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid #e5e7eb; }
+    
+    /* Dvota Purple Header */
+    .header { background-color: #7C3AED; color: white; padding: 30px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+    
+    .content { padding: 40px 30px; }
+    .content ul {
+      color: #4B5563; 
+      padding-left: 20px;
+    }
+    .content li {
+      margin-bottom: 8px;
+    }
+    .content_close{
+      margin-top: 30px;
+    }
+    /* Celebration Icon */
+    .success-icon { text-align: center; font-size: 48px; margin-bottom: 20px; animation: pop 0.5s ease-out; }
+    
+    /* Call to Action Button */
+    .btn { display: inline-block; background-color: #7C3AED; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 25px; transition: background-color 0.3s; }
+    .btn:hover { background-color: #6D28D9; }
+    
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #6B7280; }
+    
+    @keyframes pop {
+      0% { transform: scale(0); opacity: 0; }
+      80% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Welcome to Dvota!</h1>
+    </div>
+    <div class="content">
+      <div class="success-icon">🎉</div>
+      <p>Hello <strong>{{ username }}</strong>,</p>
+      <p>Thank you for verifying your email! We're excited to have you on board.</p>
+      
+      <p><strong>Dvota</strong> is your secure platform for modern, transparent elections. Here is what you can do now:</p>
+      
+      <ul>
+        <li ><strong>Cast Your Vote:</strong> Participate in active elections securely.</li>
+        <li ><strong>Real-Time Results:</strong> View transparent, live updates as votes come in.</li>
+        <li ><strong>Host Elections:</strong> Create and manage your own polls effortlessly.</li>
+      </ul>
+      
+      
+      <p class="content_close">Best regards,<br>The Dvota Team</p>
+    </div>
+  </div>
+  <div class="footer">
+    <p>Secure. Transparent. Accessible.</p>
+    <p>&copy; 2025 Dvota Voting Platform.</p>
+  </div>
+</body>
+</html>
