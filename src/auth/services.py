@@ -8,7 +8,7 @@ sessions.
 
 from sqlmodel import select
 from src.auth.models import User
-from src.auth.schemas import UserInput, VerifyOtpInput, LoginInput, ForgotPasswordInput, ResetPasswordInput
+from src.auth.schemas import UserInput, VerifyOtpInput, LoginInput, ForgotPasswordInput, ResetPasswordInput, RenewAccessTokenInput
 from src.emailServices.schemas import OtpTypes
 from sqlmodel.ext.asyncio.session import AsyncSession
 from fastapi import HTTPException, status
@@ -260,7 +260,7 @@ class AuthServices:
     
     async def resetPassword(self, resetPasswordInput: ResetPasswordInput, session: AsyncSession):
         # 1. Decode and Validate Token
-        token_decode = decode_token(resetPasswordInput.token)
+        token_decode = decode_token(resetPasswordInput.reset_token)
 
         # 2. Check Token Type
         if token_decode.get('type') != "reset":
@@ -293,3 +293,38 @@ class AuthServices:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Internal server error"
             )
+        
+    async def renewAccessToken(self, renewAccessTokenInput: RenewAccessTokenInput, session: AsyncSession):
+       
+        refresh_token_str = renewAccessTokenInput.refresh_token
+        
+        token_decode = decode_token(refresh_token_str)
+
+        if token_decode.get('type') != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid token type"
+            )
+
+       
+        user_id = token_decode.get("sub") 
+        statement = select(User).where(User.user_id == uuid.UUID(user_id))
+        result = await session.exec(statement)
+        user = result.first()
+
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+       
+        user_data = {
+            "user_id": user.user_id,
+            "email": user.email
+        }
+
+        new_token = create_token(user_data, expiry_delta=access_token_expiry, type="access")
+        
+        return {
+            "access_token" : new_token
+        }
+        
+       
