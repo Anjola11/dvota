@@ -260,10 +260,7 @@ class AuthServices:
     
     async def resetPassword(self, resetPasswordInput: ResetPasswordInput, session: AsyncSession):
         # 1. Decode and Validate Token
-        try:
-            token_decode = decode_token(resetPasswordInput.token)
-        except Exception:
-             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
+        token_decode = decode_token(resetPasswordInput.token)
 
         # 2. Check Token Type
         if token_decode.get('type') != "reset":
