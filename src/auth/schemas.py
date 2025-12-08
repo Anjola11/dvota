@@ -83,7 +83,7 @@ class ResetPasswordInput(BaseModel):
 class RenewAccessTokenInput(BaseModel):
     refresh_token: str
 
-class RenweAccessTokenResponse(BaseModel):
+class RenewAccessTokenResponse(BaseModel):
     success: bool
     message: str
     data: dict = {}
