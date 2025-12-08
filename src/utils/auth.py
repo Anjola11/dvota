@@ -18,6 +18,9 @@ import uuid
 from src.config import Config
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from src.db.redis import redis_client
+
+
 
 
 
@@ -118,12 +121,19 @@ def decode_token(token: str) -> dict:
 
 security = HTTPBearer()
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
     token = credentials.credentials
 
     token_decoded = decode_token(token)
-
+    jti = token_decoded.get('jti')
+    
+    if jti and await redis_client.get(jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked (User logged out)"
+        )
+   
     if token_decoded.get('type') != 'access':
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -132,10 +142,12 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
     user_id = token_decoded.get("sub")
     if not user_id:
-         raise HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token missing user ID."
         )
     
     return user_id
+    
+   
 

@@ -87,3 +87,8 @@ class RenewAccessTokenResponse(BaseModel):
     success: bool
     message: str
     data: dict = {}
+
+class LogoutResponse(BaseModel):
+    success: bool
+    message: str
+    data: dict = {}
