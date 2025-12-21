@@ -25,6 +25,13 @@ async def init_db():
     async with engine.begin() as conn:
 
         from src.auth.models import User
+        from src.elections.models import (
+            AllowedVoter,
+            Vote,
+            Election,
+            Position,
+            Candidate
+        )
         await conn.run_sync(SQLModel.metadata.create_all)
 
 # Session factory configured for async operations
