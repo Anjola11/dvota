@@ -1,7 +1,5 @@
 from redis.asyncio import Redis
 from src.config import Config
-from src.utils.auth import decode_token
-from datetime import datetime, timezone
 
 redis_client = Redis(
     host=Config.REDIS_HOST,

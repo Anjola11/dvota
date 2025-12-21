@@ -5,12 +5,13 @@ users (planners and vendors) and OTP records. Uses PostgreSQL-specific
 types (JSONB, TIMESTAMP) for rich data storage and timezone support.
 """
 
-from sqlmodel import SQLModel, Field, Column
+from sqlmodel import SQLModel, Field, Column, Relationship
 import uuid
 from datetime import datetime, timezone, timedelta
 import sqlalchemy.dialects.postgresql as pg
-from typing import Optional, List, Dict
-from enum import Enum
+from typing import List
+from src.elections.models import AllowedVoter, Vote
+
 
 def utc_now():
     """Generate current UTC timestamp.
@@ -30,12 +31,30 @@ class User(SQLModel, table=True):
     user_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     fullName: str
     email: str = Field(unique=True, index=True)
-    password_hash: str
+    password_hash: str = Field(exclude=True)
     email_verified: bool = False
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(pg.TIMESTAMP(timezone=True))
     )
+
+    #relationships
+    election_created: List["Election"] = Relationship(back_populates="creator")
+    allowed_elections: List["Election"] = Relationship(
+        back_populates="allowed_voters",
+        link_model=AllowedVoter
+    )
+    position_voted: List["Position"] = Relationship(
+        back_populates="voters",
+        link_model=Vote
+        )
+    candidate_voted: List["Candidate"] = Relationship(
+        back_populates="voters",
+        link_model=Vote
+        )
+    
+    
+    
 
 def get_expiry_time(minutes):
     """Generate OTP expiration timestamp.

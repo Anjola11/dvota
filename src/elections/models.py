@@ -1,0 +1,129 @@
+from sqlmodel import SQLModel, Field, Column,Relationship
+from typing import List, Optional
+import uuid
+from datetime import datetime, timezone
+import sqlalchemy.dialects.postgresql as pg
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+class AllowedVoter(SQLModel, table = True):
+
+    __tablename__ = "allowed_voters"
+
+    user_id: uuid.UUID= Field(
+        foreign_key="users.user_id",
+        primary_key=True
+    )
+    election_id: uuid.UUID = Field(
+        foreign_key="elections.id",
+        primary_key=True
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(pg.TIMESTAMP(timezone=True)))
+
+class Vote(SQLModel, table = True):
+
+    __tablename__ = "votes"
+
+    user_id: uuid.UUID= Field(
+        foreign_key="users.user_id",
+        primary_key=True
+    )
+    position_id: uuid.UUID = Field(
+        foreign_key="positions.id",
+        primary_key=True
+    )
+    candidate_id: uuid.UUID = Field(
+        foreign_key="candidates.id",
+    )
+    
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(pg.TIMESTAMP(timezone=True)))
+
+class Election(SQLModel, table = True):
+
+    __tablename__ = "elections"
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True
+    )
+    creator_id: uuid.UUID = Field(
+        foreign_key="users.user_id"
+    )
+    start_time: datetime = Field(
+        sa_column=Column(pg.TIMESTAMP(timezone=True))
+    )
+    stop_time: datetime = Field(
+        sa_column=Column(pg.TIMESTAMP(timezone=True))
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(pg.TIMESTAMP(timezone=True))
+    )
+
+    #relationships
+    creator: Optional["User"] = Relationship(
+        back_populates="election_created"
+    )
+    positions: List["Position"] = Relationship(
+        back_populates="election"
+    )
+    #many to many
+    allowed_voters: List["User"] = Relationship(
+        back_populates="allowed_elections",
+        link_model=AllowedVoter
+    )
+    
+
+
+class Position(SQLModel, table = True):
+
+    __tablename__ = "positions"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    election_id: uuid.UUID = Field(foreign_key="elections.id")
+    position_name: str
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(pg.TIMESTAMP(timezone=True))
+    )
+
+    #relationship
+    election: Optional["Election"] = Relationship(
+        back_populates="positions"
+    )
+    candidates: List["Candidate"] = Relationship(
+        back_populates="position"
+    )
+    voters: List["User"] = Relationship(
+        back_populates="position_voted",
+        link_model=Vote
+    )
+
+class Candidate(SQLModel, table = True):
+
+    __tablename__ = "candidates"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="users.user_id"
+    )
+    fullname: str
+    nickname: Optional[str] = None
+    vote_count: int = Field(default=0)
+    position_id: uuid.UUID = Field(foreign_key="positions.id")
+
+    #relationship
+    position: Optional["Position"] = Relationship(
+        back_populates="candidates"
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(pg.TIMESTAMP(timezone=True))
+    )
+    voters: List["User"] = Relationship(
+        back_populates="candidate_voted",
+        link_model=Vote
+    )
