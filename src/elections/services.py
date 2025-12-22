@@ -157,11 +157,17 @@ class ElectionServices:
         except IntegrityError as e:
             await session.rollback()
             error_msg = str(e.orig)
-            if "foreign_key" in error_msg:
-                detail = "Invalid position id."
+            
+            if "unique_candidate_per_position" in error_msg:
+                detail = "This user is already a candidate for this position."
+            elif "foreign_key" in error_msg:
+                detail = "The specified position does not exist."
+            else:
+                detail = "A conflict occurred while adding the candidate."
+
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                 detail = detail
+                detail=detail
             )
 
 
