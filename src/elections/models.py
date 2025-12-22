@@ -3,6 +3,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
 import sqlalchemy.dialects.postgresql as pg
+from sqlalchemy import UniqueConstraint
 
 def utc_now():
     return datetime.now(timezone.utc)
@@ -46,6 +47,9 @@ class Vote(SQLModel, table = True):
 class Election(SQLModel, table = True):
 
     __tablename__ = "elections"
+    __table_args__ = (
+        UniqueConstraint("creator_id", "election_name", name="unique_Creator_election_name"),
+    )
     id: uuid.UUID = Field(
         default_factory=uuid.uuid4,
         primary_key=True
@@ -53,6 +57,7 @@ class Election(SQLModel, table = True):
     creator_id: uuid.UUID = Field(
         foreign_key="users.user_id"
     )
+    election_name: str
     start_time: datetime = Field(
         sa_column=Column(pg.TIMESTAMP(timezone=True))
     )
@@ -82,6 +87,9 @@ class Election(SQLModel, table = True):
 class Position(SQLModel, table = True):
 
     __tablename__ = "positions"
+    __table_args__ = (
+        UniqueConstraint("election_id", "position_name", name="unique_election_postion_name"),
+    )
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     election_id: uuid.UUID = Field(foreign_key="elections.id")
     position_name: str
@@ -105,7 +113,7 @@ class Position(SQLModel, table = True):
 class Candidate(SQLModel, table = True):
 
     __tablename__ = "candidates"
-
+    
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(
         foreign_key="users.user_id"

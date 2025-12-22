@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from src.db.main import init_db
+from src.db.redis import redis_client, check_redis_connection
 from src.auth.routes import authRouter
+from src.elections.routes import electionRouter
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -9,8 +11,18 @@ from fastapi.exceptions import RequestValidationError
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("\n---Server Started---\n")
+    
+    # 1. Initialize Postgres
     await init_db()
+    
+    # 2. Check Redis Connection
+    await check_redis_connection()
+    
     yield
+    
+    # 3. Clean up Redis connections on shutdown
+    print("---Closing Redis Connection---")
+    await redis_client.close()
     print("---Server Closed---")
 
 app = FastAPI(
@@ -30,7 +42,7 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+@app.get("/", tags=["Server Health"])
 def health_check():
     return{
         "status": "Success",
@@ -74,4 +86,5 @@ async def custom_validation_exception_handler(request:Request, exc: RequestValid
             "data": None
         }
     )
-app.include_router(authRouter, prefix="/api/auth")
+app.include_router(authRouter, prefix="/api/auth", tags=["Auth"])
+app.include_router(electionRouter, prefix="/api/elections", tags=["Election"])

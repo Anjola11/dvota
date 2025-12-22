@@ -34,6 +34,7 @@ class AuthServices:
 
     async def checkUserExists(self, userInput: UserInput, session: AsyncSession):
         statement = select(User).where(User.email == userInput.email)
+        
         result = await session.exec(statement)
         user = result.first()
 
