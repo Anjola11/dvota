@@ -1,13 +1,42 @@
-from src.elections.schemas import CreateElection, CreatePosition, CreateCandidate
+from src.elections.schemas import CreateElectionInput, CreatePositionInput, CreateCandidateInput, AddAllowedVotersInput
 from fastapi import HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
-from src.elections.models import Election, Position, Candidate
+from src.elections.models import Election, Position, Candidate, AllowedVoter
 from src.auth.models import User
 from sqlmodel import select
 from sqlalchemy.exc import DatabaseError, IntegrityError
 
 
 class ElectionServices:
+
+    async def get_user_by_email(self,user_email,session: AsyncSession,raise_Exception: bool = False):
+        statement = select(User).where(User.email == user_email)
+
+        try:
+            result = await session.exec(statement)
+            user = result.first()
+        except DatabaseError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail= "internal server error"
+            )
+        if not user:
+            if raise_Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="user does not exist"
+                )
+            return {
+                "success": False,
+                "user_email":user_email
+                }
+        
+        user_id = user.user_id
+        return {
+                "success": True,
+                "user_id":user_id
+                }
+    
     """Verify if the user is the one that created the election"""
     async def verify_creator(self,creator_id, election_id, session: AsyncSession):
         statement = select(Election).where(Election.id == election_id)
@@ -34,7 +63,7 @@ class ElectionServices:
         
         return True
 
-    async def create_election(self,election_details: CreateElection, creator_id: str, session: AsyncSession):
+    async def create_election(self,election_details: CreateElectionInput, creator_id: str, session: AsyncSession):
         if election_details.stopTime < election_details.startTime:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -77,7 +106,7 @@ class ElectionServices:
                 detail=detail
             )
         
-    async def create_position(self, creator_id, position_details: CreatePosition, session: AsyncSession):
+    async def create_position(self, creator_id, position_details: CreatePositionInput, session: AsyncSession):
 
         await self.verify_creator(creator_id, position_details.election_id, session)
 
@@ -113,26 +142,12 @@ class ElectionServices:
                 detail=detail
             )
         
-    async def create_candidates(self,creator_id, candidate_details: CreateCandidate, session:AsyncSession):
+    async def create_candidates(self,creator_id, candidate_details: CreateCandidateInput, session:AsyncSession):
         await self.verify_creator(creator_id,election_id=candidate_details.election_id, session=session)
 
-        statement = select(User).where(User.email == candidate_details.email)
+        user = await self.get_user_by_email(candidate_details.email,session, raise_Exception=True)
 
-        try:
-            result = await session.exec(statement)
-            user = result.first()
-        except DatabaseError:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail= "internal server error"
-            )
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="user does not exist"
-            )
-        
-        user_id = user.user_id
+        user_id = user.get('user_id')
 
         new_candidate = Candidate(
             user_id=user_id,
@@ -169,6 +184,50 @@ class ElectionServices:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=detail
             )
+        
+
+    async def add_allowed_voters(self, creator_id, voters_details: AddAllowedVotersInput, session: AsyncSession):
+        await self.verify_creator(creator_id, voters_details.election_id, session)
+
+        #Fetch current whitelist to avoid internal duplicates
+        stmt = select(AllowedVoter.user_id).where(AllowedVoter.election_id == voters_details.election_id)
+
+        result = await session.exec(stmt)
+        existing_voter_ids = set(result.all())
+
+        voters_to_add_ids = []
+        already_present_emails = [] 
+        unregistered_emails = []
+
+        for email in voters_details.emails:
+            
+            user_data = await self.get_user_by_email(email, session, raise_Exception=False)
+            
+            if user_data.get('success'):
+                u_id = user_data.get('user_id')
+                if u_id in existing_voter_ids:
+                    already_present_emails.append(email)
+                else:
+                    voters_to_add_ids.append(u_id)
+            else:
+                unregistered_emails.append(email)
+
+        # Add valid users
+        for u_id in voters_to_add_ids:
+            allowed_voter = AllowedVoter(
+                user_id=u_id,
+                election_id=voters_details.election_id)
+            session.add(allowed_voter)
+
+        await session.commit()
+
+        return {
+            "added_count": len(voters_to_add_ids),
+            "already_enrolled": already_present_emails,
+            "not_registered": unregistered_emails
+        }
+
+
 
 
 

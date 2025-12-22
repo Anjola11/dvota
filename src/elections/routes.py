@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends, status
 from src.utils.auth import get_current_user
 from src.elections.schemas import (
-    CreateElection, 
-    ElectionCreateResponse, 
-    CreatePosition,
-    PositionCreateResponse,
-    CreateCandidate,
-    CandidateCreateResponse
+    CreateElectionInput, 
+    CreateElectionResponse,
+    DeleteElection,
+    CreatePositionInput,
+    CreatePositionResponse,
+    CreateCandidateInput,
+    CreateCandidateResponse,
+    AddAllowedVotersInput,
+    AddedAllowedVotersResponse
     )
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.main import get_Session
@@ -17,8 +20,8 @@ from src.elections.services import ElectionServices
 electionRouter = APIRouter()
 electionServices = ElectionServices()
 
-@electionRouter.post("/create-election", response_model=ElectionCreateResponse, status_code=status.HTTP_201_CREATED)
-async def create_election(election_details: CreateElection, session: AsyncSession = Depends(get_Session),
+@electionRouter.post("/create-election", response_model=CreateElectionResponse, status_code=status.HTTP_201_CREATED)
+async def create_election(election_details: CreateElectionInput, session: AsyncSession = Depends(get_Session),
 creator_id: str = Depends(get_current_user), ):
 
     election = await electionServices.create_election(election_details, creator_id, session)
@@ -29,9 +32,10 @@ creator_id: str = Depends(get_current_user), ):
         "data": election
     }
 
-@electionRouter.post("/add-position", response_model=PositionCreateResponse, status_code=status.HTTP_201_CREATED)
+
+@electionRouter.post("/add-position", response_model=CreatePositionResponse, status_code=status.HTTP_201_CREATED)
 async def add_position(
-    position_details: CreatePosition,
+    position_details: CreatePositionInput,
     creator_id: str = Depends(get_current_user),  
     session: AsyncSession = Depends(get_Session)
 ):
@@ -43,9 +47,9 @@ async def add_position(
         "data": position
     }
     
-@electionRouter.post("/add-candidate", response_model=CandidateCreateResponse, status_code=status.HTTP_201_CREATED)
+@electionRouter.post("/add-candidate", response_model=CreateCandidateResponse, status_code=status.HTTP_201_CREATED)
 async def add_candidate(
-    candidate_details: CreateCandidate,
+    candidate_details: CreateCandidateInput,
     creator_id: str = Depends(get_current_user), 
     session: AsyncSession = Depends(get_Session)
 ):
@@ -55,4 +59,17 @@ async def add_candidate(
         "message": "position successfuly added",
         "data": candidate
    }
-   
+
+@electionRouter.post("/add-allowed-voters", response_model=AddedAllowedVotersResponse, status_code=status.HTTP_201_CREATED)
+async def add_voters(
+   voter_details: AddAllowedVotersInput,
+    creator_id: str = Depends(get_current_user), 
+    session: AsyncSession = Depends(get_Session)
+):
+   added_voter  = await electionServices.add_allowed_voters(creator_id, voter_details, session)
+
+   return {
+       "success": True,
+        "message": "position successfuly added",
+        "data": added_voter
+   }

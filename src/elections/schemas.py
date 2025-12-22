@@ -1,7 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from datetime import datetime
 import uuid
-from typing import Optional
+from typing import Optional, List
+from enum import Enum
 
 
 class Election(BaseModel):
@@ -13,29 +14,35 @@ class Election(BaseModel):
     stop_time: datetime 
     created_at: datetime 
 
-class CreateElection(BaseModel):
+class CreateElectionInput(BaseModel):
     election_name: str
     startTime: datetime
     stopTime: datetime
 
-class ElectionCreateResponse(BaseModel):
+class CreateElectionResponse(BaseModel):
     success: bool
     message: str
     data: Election
 
+class DeleteElection(BaseModel):
+    election_id: uuid.UUID
+
+class ElectionResponse(BaseModel):
+    success: bool
+    message: str
+    data: Election
 
 class Position(BaseModel):
-
     id: uuid.UUID 
     election_id: uuid.UUID 
     position_name: str
     created_at: datetime 
 
-class CreatePosition(BaseModel):
+class CreatePositionInput(BaseModel):
     election_id: uuid.UUID 
     position_name: str
 
-class PositionCreateResponse(BaseModel):
+class CreatePositionResponse(BaseModel):
     success: bool
     message: str
     data: Position
@@ -47,14 +54,28 @@ class Candidate(BaseModel):
     nickname: Optional[str] = None
     position_id: uuid.UUID 
 
-class CreateCandidate(BaseModel):
+class CreateCandidateInput(BaseModel):
     election_id: uuid.UUID
     email: str
     fullname: str
     nickname: Optional[str] = None
     position_id: uuid.UUID
 
-class CandidateCreateResponse(BaseModel):
+class CreateCandidateResponse(BaseModel):
     success: bool
     message: str
     data: Candidate
+
+class AddAllowedVotersInput(BaseModel):
+    election_id: uuid.UUID
+    emails: List[EmailStr]
+
+class AddedAllowedVoters(BaseModel):
+    added_count: int
+    already_enrolled: List[EmailStr]
+    not_registered: List[EmailStr]
+
+class AddedAllowedVotersResponse(BaseModel):
+    success: bool
+    message: str
+    data: AddedAllowedVoters
