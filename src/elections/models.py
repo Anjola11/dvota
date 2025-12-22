@@ -14,10 +14,12 @@ class AllowedVoter(SQLModel, table = True):
 
     user_id: uuid.UUID= Field(
         foreign_key="users.user_id",
+        ondelete="CASCADE",
         primary_key=True
     )
     election_id: uuid.UUID = Field(
         foreign_key="elections.id",
+        ondelete="CASCADE",
         primary_key=True
     )
     created_at: datetime = Field(
@@ -34,9 +36,11 @@ class Vote(SQLModel, table = True):
     )
     position_id: uuid.UUID = Field(
         foreign_key="positions.id",
+        ondelete="CASCADE",
         primary_key=True
     )
     candidate_id: uuid.UUID = Field(
+        ondelete="CASCADE",
         foreign_key="candidates.id",
     )
     
@@ -55,7 +59,8 @@ class Election(SQLModel, table = True):
         primary_key=True
     )
     creator_id: uuid.UUID = Field(
-        foreign_key="users.user_id"
+        foreign_key="users.user_id",
+        ondelete="CASCADE"
     )
     election_name: str
     start_time: datetime = Field(
@@ -71,10 +76,13 @@ class Election(SQLModel, table = True):
 
     #relationships
     creator: Optional["User"] = Relationship(
-        back_populates="election_created"
+        back_populates="election_created",
     )
     positions: List["Position"] = Relationship(
-        back_populates="election"
+        back_populates="election",
+         sa_relationship_kwargs={
+            "cascade": "all, delete-orphan"
+        }
     )
     #many to many
     allowed_voters: List["User"] = Relationship(
@@ -91,7 +99,10 @@ class Position(SQLModel, table = True):
         UniqueConstraint("election_id", "position_name", name="unique_election_postion_name"),
     )
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    election_id: uuid.UUID = Field(foreign_key="elections.id")
+    election_id: uuid.UUID = Field(
+        foreign_key="elections.id",
+        ondelete="CASCADE"
+        )
     position_name: str
     created_at: datetime = Field(
         default_factory=utc_now,
@@ -103,7 +114,10 @@ class Position(SQLModel, table = True):
         back_populates="positions"
     )
     candidates: List["Candidate"] = Relationship(
-        back_populates="position"
+        back_populates="position",
+         sa_relationship_kwargs={
+            "cascade": "all, delete-orphan"
+        }
     )
     voters: List["User"] = Relationship(
         back_populates="position_voted",
@@ -121,7 +135,7 @@ class Candidate(SQLModel, table = True):
     fullname: str
     nickname: Optional[str] = None
     vote_count: int = Field(default=0)
-    position_id: uuid.UUID = Field(foreign_key="positions.id")
+    position_id: uuid.UUID = Field(foreign_key="positions.id", ondelete="CASCADE")
 
     #relationship
     position: Optional["Position"] = Relationship(

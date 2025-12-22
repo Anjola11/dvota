@@ -24,13 +24,13 @@ class CreateElectionResponse(BaseModel):
     message: str
     data: Election
 
-class DeleteElection(BaseModel):
+class DeleteElectionInput(BaseModel):
     election_id: uuid.UUID
 
-class ElectionResponse(BaseModel):
+class DeleteElectionResponse(BaseModel):
     success: bool
     message: str
-    data: Election
+    data: dict = {}
 
 class Position(BaseModel):
     id: uuid.UUID 
@@ -46,6 +46,15 @@ class CreatePositionResponse(BaseModel):
     success: bool
     message: str
     data: Position
+
+class DeletePositionInput(BaseModel):
+    election_id: uuid.UUID
+    position_id: uuid.UUID
+
+class DeletePositionResponse(BaseModel):
+    success: bool
+    message: str
+    data: dict = {}
 
 class Candidate(BaseModel):
     id: uuid.UUID 
@@ -66,6 +75,15 @@ class CreateCandidateResponse(BaseModel):
     message: str
     data: Candidate
 
+class DeleteCandidateInput(BaseModel):
+    election_id: uuid.UUID
+    candidate_id: uuid.UUID
+
+class DeleteCandidateResponse(BaseModel):
+    success: bool
+    message: str
+    data: dict = {}
+
 class AddAllowedVotersInput(BaseModel):
     election_id: uuid.UUID
     emails: List[EmailStr]
@@ -79,3 +97,12 @@ class AddedAllowedVotersResponse(BaseModel):
     success: bool
     message: str
     data: AddedAllowedVoters
+
+class DeleteAllowedVoterInput(BaseModel):
+    election_id: uuid.UUID
+    email: EmailStr
+
+class DeleteAllowedVoterResponse(BaseModel):
+    success: bool
+    message: str
+    data: dict = {}

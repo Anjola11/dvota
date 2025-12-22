@@ -1,15 +1,16 @@
 from fastapi import APIRouter, Depends, status
 from src.utils.auth import get_current_user
 from src.elections.schemas import (
-    CreateElectionInput, 
-    CreateElectionResponse,
-    DeleteElection,
-    CreatePositionInput,
-    CreatePositionResponse,
-    CreateCandidateInput,
-    CreateCandidateResponse,
-    AddAllowedVotersInput,
-    AddedAllowedVotersResponse
+    CreateElectionInput, CreateElectionResponse,
+    DeleteElectionInput,DeleteElectionResponse,
+
+    CreatePositionInput,CreatePositionResponse,DeletePositionInput,DeletePositionResponse,
+
+    CreateCandidateInput,CreateCandidateResponse,
+    DeleteCandidateInput,DeleteCandidateResponse,
+
+    AddAllowedVotersInput,AddedAllowedVotersResponse,
+    DeleteAllowedVoterInput,  DeleteAllowedVoterResponse
     )
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.main import get_Session
@@ -32,6 +33,18 @@ creator_id: str = Depends(get_current_user), ):
         "data": election
     }
 
+@electionRouter.delete("/delete-election",response_model=DeleteElectionResponse, status_code=status.HTTP_201_CREATED)
+async def delete_election(election_details: DeleteElectionInput, session: AsyncSession = Depends(get_Session),
+creator_id: str = Depends(get_current_user), ):
+
+    await electionServices.delete_election(election_details, creator_id, session)
+
+    return {
+        "success": True,
+        "message": "election successfuly deleted",
+        "data": {}
+    }
+
 
 @electionRouter.post("/add-position", response_model=CreatePositionResponse, status_code=status.HTTP_201_CREATED)
 async def add_position(
@@ -46,7 +59,17 @@ async def add_position(
         "message": "position successfuly added",
         "data": position
     }
+
+@electionRouter.delete("/delete-position", response_model=DeletePositionResponse, status_code=status.HTTP_200_OK)
+async def delete_position(position_details: DeletePositionInput, session: AsyncSession = Depends(get_Session), creator_id: str = Depends(get_current_user)):
     
+    await electionServices.delete_position(position_details, creator_id, session)
+    return {
+        "success": True, 
+        "message": "position successfully deleted", 
+        "data": {}
+        }
+
 @electionRouter.post("/add-candidate", response_model=CreateCandidateResponse, status_code=status.HTTP_201_CREATED)
 async def add_candidate(
     candidate_details: CreateCandidateInput,
@@ -59,6 +82,16 @@ async def add_candidate(
         "message": "position successfuly added",
         "data": candidate
    }
+
+
+@electionRouter.delete("/delete-candidate", response_model=DeleteCandidateResponse, status_code=status.HTTP_200_OK)
+async def delete_candidate(candidate_details: DeleteCandidateInput, session: AsyncSession = Depends(get_Session), creator_id: str = Depends(get_current_user)):
+    
+    await electionServices.delete_candidate(candidate_details, creator_id, session)
+    return {
+        "success": True, 
+        "message": "candidate successfully deleted", 
+        "data": {}}
 
 @electionRouter.post("/add-allowed-voters", response_model=AddedAllowedVotersResponse, status_code=status.HTTP_201_CREATED)
 async def add_voters(
@@ -73,3 +106,13 @@ async def add_voters(
         "message": "position successfuly added",
         "data": added_voter
    }
+
+@electionRouter.delete("/delete-allowed-voter", response_model=DeleteAllowedVoterResponse, status_code=status.HTTP_200_OK)
+async def delete_voter(voter_details: DeleteAllowedVoterInput, session: AsyncSession = Depends(get_Session), creator_id: str = Depends(get_current_user)):
+    
+    await electionServices.delete_allowed_voter(creator_id, voter_details, session)
+    return {
+        "success": True, 
+        "message": "Voter successfully removed", 
+        "data": {}
+        }

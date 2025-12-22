@@ -39,9 +39,17 @@ class User(SQLModel, table=True):
     )
 
     #relationships
-    election_created: List["Election"] = Relationship(back_populates="creator")
+    election_created: List["Election"] = Relationship(
+        back_populates="creator",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan"
+        }              
+                                                      )
     allowed_elections: List["Election"] = Relationship(
         back_populates="allowed_voters",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan"
+        },
         link_model=AllowedVoter
     )
     position_voted: List["Position"] = Relationship(

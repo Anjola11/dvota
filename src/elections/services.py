@@ -1,4 +1,13 @@
-from src.elections.schemas import CreateElectionInput, CreatePositionInput, CreateCandidateInput, AddAllowedVotersInput
+from src.elections.schemas import (
+    CreateElectionInput, 
+    CreatePositionInput, 
+    CreateCandidateInput,
+    DeleteElectionInput,
+    DeletePositionInput,
+    DeleteCandidateInput,
+    AddAllowedVotersInput,
+    DeleteAllowedVoterInput
+)
 from fastapi import HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.elections.models import Election, Position, Candidate, AllowedVoter
@@ -105,6 +114,33 @@ class ElectionServices:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=detail
             )
+    
+    async def delete_election(self,election_details: DeleteElectionInput, creator_id: str, session: AsyncSession):
+        await self.verify_creator(creator_id, election_details.election_id, session)
+        
+        statement = select(Election).where(Election.id == election_details.election_id)
+        try:
+            result = await session.exec(statement)
+            election = result.first()
+
+            if election:
+                await session.delete(election)
+
+                await session.commit()
+                return True
+            
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="election not found"
+            )
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
+        
+    
         
     async def create_position(self, creator_id, position_details: CreatePositionInput, session: AsyncSession):
 
@@ -140,6 +176,31 @@ class ElectionServices:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=detail
+            )
+        
+    async def delete_position(self,position_details: DeletePositionInput, creator_id: str, session: AsyncSession):
+        await self.verify_creator(creator_id, position_details.election_id, session)
+        
+        statement = select(Position).where(Position.id == position_details.position_id)
+        try:
+            result = await session.exec(statement)
+            position = result.first()
+
+            if position:
+                await session.delete(position)
+
+                await session.commit()
+                return True
+            
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="position not found"
+            )
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
             )
         
     async def create_candidates(self,creator_id, candidate_details: CreateCandidateInput, session:AsyncSession):
@@ -185,14 +246,38 @@ class ElectionServices:
                 detail=detail
             )
         
+    async def delete_candidate(self,candidate_details: DeleteCandidateInput, creator_id: str, session: AsyncSession):
+        await self.verify_creator(creator_id, candidate_details.election_id, session)
+        
+        statement = select(Candidate).where(Candidate.id == candidate_details.candidate_id)
+        try:
+            result = await session.exec(statement)
+            candidate = result.first()
 
+            if candidate:
+                await session.delete(candidate)
+
+                await session.commit()
+                return True
+            
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="position not found"
+            )
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
+        
     async def add_allowed_voters(self, creator_id, voters_details: AddAllowedVotersInput, session: AsyncSession):
         await self.verify_creator(creator_id, voters_details.election_id, session)
 
         #Fetch current whitelist to avoid internal duplicates
-        stmt = select(AllowedVoter.user_id).where(AllowedVoter.election_id == voters_details.election_id)
+        statement = select(AllowedVoter.user_id).where(AllowedVoter.election_id == voters_details.election_id)
 
-        result = await session.exec(stmt)
+        result = await session.exec(statement)
         existing_voter_ids = set(result.all())
 
         voters_to_add_ids = []
@@ -228,6 +313,32 @@ class ElectionServices:
         }
 
 
+    async def delete_allowed_voters(self, creator_id, voters_details: DeleteAllowedVoterInput, session: AsyncSession):
 
+        await self.verify_creator(creator_id, voters_details.election_id, session)
 
+        #Get the user_id from the email
+        user_data = await self.get_user_by_email(voters_details.email, session, raise_Exception=True)
+        user_id = user_data.get('user_id')
 
+        #Try to find the specific link in the whitelist
+        statement = select(AllowedVoter).where(
+            AllowedVoter.election_id == voters_details.election_id,
+            AllowedVoter.user_id == user_id
+        )
+        
+        try:
+            result = await session.exec(statement)
+            voter_record = result.first()
+
+            if not voter_record:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User is not on the whitelist for this election")
+
+            await session.delete(voter_record)
+            await session.commit()
+            return True
+
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
+            
