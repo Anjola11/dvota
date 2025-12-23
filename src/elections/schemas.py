@@ -106,3 +106,10 @@ class DeleteAllowedVoterResponse(BaseModel):
     success: bool
     message: str
     data: dict = {}
+
+
+class VoteInput(BaseModel):
+    user_id: uuid.UUID
+    election_id: uuid.UUID
+    position_id: uuid.UUID 
+    candidate_id: uuid.UUID 

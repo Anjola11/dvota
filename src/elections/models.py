@@ -29,6 +29,11 @@ class AllowedVoter(SQLModel, table = True):
 class Vote(SQLModel, table = True):
 
     __tablename__ = "votes"
+    __table_args__ = (
+        UniqueConstraint(
+        "user_id", "position_id", name="duplicate_vote"
+    ),
+    )
 
     user_id: uuid.UUID= Field(
         foreign_key="users.user_id",
@@ -149,3 +154,4 @@ class Candidate(SQLModel, table = True):
         back_populates="candidate_voted",
         link_model=Vote
     )
+    

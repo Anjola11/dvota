@@ -6,14 +6,17 @@ from src.elections.schemas import (
     DeletePositionInput,
     DeleteCandidateInput,
     AddAllowedVotersInput,
-    DeleteAllowedVoterInput
+    DeleteAllowedVoterInput,
+    VoteInput
 )
 from fastapi import HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
-from src.elections.models import Election, Position, Candidate, AllowedVoter
+from src.elections.models import Election, Position, Candidate, AllowedVoter, Vote
 from src.auth.models import User
 from sqlmodel import select
 from sqlalchemy.exc import DatabaseError, IntegrityError
+
+from datetime import datetime, timezone
 
 
 class ElectionServices:
@@ -203,73 +206,87 @@ class ElectionServices:
                 detail="internal server error"
             )
         
-    async def create_candidates(self,creator_id, candidate_details: CreateCandidateInput, session:AsyncSession):
-        await self.verify_creator(creator_id,election_id=candidate_details.election_id, session=session)
+    async def create_candidates(self, creator_id, candidate_details: CreateCandidateInput, session: AsyncSession):
+        await self.verify_creator(creator_id, election_id=candidate_details.election_id, session=session)
 
-        user = await self.get_user_by_email(candidate_details.email,session, raise_Exception=True)
-
+        user = await self.get_user_by_email(candidate_details.email, session, raise_Exception=True)
         user_id = user.get('user_id')
 
         new_candidate = Candidate(
             user_id=user_id,
-            fullname= candidate_details.fullname,
-            nickname= candidate_details.nickname,
-            position_id= candidate_details.position_id
+            fullname=candidate_details.fullname,
+            nickname=candidate_details.nickname,
+            position_id=candidate_details.position_id
         )
 
         try:
             session.add(new_candidate)
+            
+            # Check if they are already allowed to vote to avoid duplicate key errors
+            stmt = select(AllowedVoter).where(
+                AllowedVoter.user_id == user_id, 
+                AllowedVoter.election_id == candidate_details.election_id
+            )
+            existing = await session.exec(stmt)
+            if not existing.first():
+                new_allowed_voter = AllowedVoter(
+                    user_id=user_id,
+                    election_id=candidate_details.election_id
+                )
+                session.add(new_allowed_voter)
+
             await session.commit()
             await session.refresh(new_candidate)
             return new_candidate
-        
-        except DatabaseError:
-            await session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="internal server error"
-            )
-        
+
         except IntegrityError as e:
             await session.rollback()
-            error_msg = str(e.orig)
-            
-            if "unique_candidate_per_position" in error_msg:
-                detail = "This user is already a candidate for this position."
-            elif "foreign_key" in error_msg:
-                detail = "The specified position does not exist."
-            else:
-                detail = "A conflict occurred while adding the candidate."
-
+            # Handle specific candidate-per-position constraint
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=detail
-            )
+                status_code=status.HTTP_409_CONFLICT, 
+                detail="User is already a candidate for this position"
+                )
         
-    async def delete_candidate(self,candidate_details: DeleteCandidateInput, creator_id: str, session: AsyncSession):
+    async def delete_candidate(self, candidate_details: DeleteCandidateInput, creator_id: str, session: AsyncSession):
         await self.verify_creator(creator_id, candidate_details.election_id, session)
         
-        statement = select(Candidate).where(Candidate.id == candidate_details.candidate_id)
-        try:
-            result = await session.exec(statement)
-            candidate = result.first()
+        # Fetch Candidate
+        candidate_statement = select(Candidate).where(Candidate.id == candidate_details.candidate_id)
+        result = await session.exec(candidate_statement)
+        candidate = result.first()
 
-            if candidate:
-                await session.delete(candidate)
-
-                await session.commit()
-                return True
-            
+        if not candidate:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="position not found"
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="Candidate not found"
+                )
+
+        candidate_user_id = candidate.user_id
+
+        try:
+            # Delete Candidate
+            await session.delete(candidate)
+
+            #Specifically remove them from the whitelist of THIS election
+            voter_stmt = select(AllowedVoter).where(
+                AllowedVoter.user_id == candidate_user_id,
+                AllowedVoter.election_id == candidate_details.election_id
             )
+            voter_result = await session.exec(voter_stmt)
+            voter_record = voter_result.first()
+
+            if voter_record:
+                await session.delete(voter_record)
+
+            await session.commit()
+            return True
+
         except DatabaseError:
             await session.rollback()
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="internal server error"
-            )
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail="Internal server error"
+                )
         
     async def add_allowed_voters(self, creator_id, voters_details: AddAllowedVotersInput, session: AsyncSession):
         await self.verify_creator(creator_id, voters_details.election_id, session)
@@ -341,4 +358,99 @@ class ElectionServices:
         except DatabaseError:
             await session.rollback()
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
-            
+    
+
+    async def vote(self, voter_input: VoteInput, session: AsyncSession):
+        #Fetch Election
+        election_statement = select(Election).where(Election.id == voter_input.election_id)
+        election_result = await session.exec(election_statement)
+        election = election_result.first()
+
+        if not election:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Election does not exist"
+            )
+
+        #Robust Timing Check (Timezone Aware)
+        # Using timezone.utc to ensure consistency across all servers/regions
+        now = datetime.now(timezone.utc)
+        
+        if election.start_time > now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The election has not started"
+            )
+        if election.stop_time < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The election has ended"
+            )
+
+        # Whitelist Check
+        allowed_voter_statement = select(AllowedVoter).where(
+            AllowedVoter.user_id == voter_input.user_id,
+            AllowedVoter.election_id == voter_input.election_id
+        )
+        allowed_voter_result = await session.exec(allowed_voter_statement)
+
+        if not allowed_voter_result.first():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="You are not authorized to vote in this election"
+            )
+
+        #Deep Candidate Validation
+        #join with Position to ensure the candidate belongs to the election_id provided
+        candidate_stmt = (
+            select(Candidate)
+            .join(Position)
+            .where(
+                Candidate.id == voter_input.candidate_id,
+                Position.election_id == voter_input.election_id
+            )
+        )
+        candidate_res = await session.exec(candidate_stmt)
+        candidate_voted = candidate_res.first()
+
+        if not candidate_voted:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid candidate selection for this election"
+            )
+
+        #Logic Execution
+        candidate_voted.vote_count += 1
+        new_vote = Vote(
+            user_id=voter_input.user_id,
+            position_id=candidate_voted.position_id,
+            candidate_id=voter_input.candidate_id
+        )
+
+        try:
+            session.add(candidate_voted)
+            session.add(new_vote)
+            await session.commit()
+            return True
+
+        except IntegrityError as e:
+            await session.rollback()
+            error_msg = str(e.orig)
+            if "duplicate_vote" in error_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="You have already voted for this position"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A conflict occurred while recording your vote"
+            )
+
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error"
+            )
+
+
