@@ -16,8 +16,8 @@ class Election(BaseModel):
 
 class CreateElectionInput(BaseModel):
     election_name: str
-    startTime: datetime
-    stopTime: datetime
+    start_time: datetime
+    stop_time: datetime
 
 class CreateElectionResponse(BaseModel):
     success: bool

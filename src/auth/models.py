@@ -39,34 +39,32 @@ class User(SQLModel, table=True):
     )
 
     #relationships
+   # ONE-TO-MANY
     election_created: List["Election"] = Relationship(
         back_populates="creator",
-        sa_relationship_kwargs={
-            "cascade": "all, delete-orphan"
-        }
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
 
+    # MANY-TO-MANY
     allowed_elections: List["Election"] = Relationship(
         back_populates="allowed_voters",
-        sa_relationship_kwargs={
-            "cascade": "all" 
-        },
+        sa_relationship_kwargs={"cascade": "save-update, merge"}, 
         link_model=AllowedVoter
     )
 
-    
+    # MANY-TO-MANY
     position_voted: List["Position"] = Relationship(
         back_populates="voters",
-        sa_relationship_kwargs={"cascade": "all"},
+        sa_relationship_kwargs={"cascade": "save-update, merge"},
         link_model=Vote
     )
 
+    # MANY-TO-MANY
     candidate_voted: List["Candidate"] = Relationship(
         back_populates="voters",
-        sa_relationship_kwargs={"cascade": "all"},
+        sa_relationship_kwargs={"cascade": "save-update, merge"},
         link_model=Vote
     )
-    
     
     
 

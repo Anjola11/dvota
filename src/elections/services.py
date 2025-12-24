@@ -86,7 +86,7 @@ class ElectionServices:
 
     async def create_election(self, election_details: CreateElectionInput, creator_id: str, session: AsyncSession):
         """Initializes a new election event with timing constraints."""
-        if election_details.stopTime < election_details.startTime:
+        if election_details.stop_time < election_details.start_time:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="stopTime must be greater than startTime"
@@ -95,73 +95,35 @@ class ElectionServices:
         new_election = Election(
             creator_id=creator_id,
             election_name=election_details.election_name,
-            start_time=election_details.startTime,
-            stop_time=election_details.stopTime
+            start_time=election_details.start_time,
+            stop_time=election_details.stop_time
         )
         
-       
         new_allowed_voter = AllowedVoter(
             user_id=creator_id,
-            election_id=new_election.id
+            election_id=new_election.id 
         )
-            
-
 
         try:
-            session.add(new_election)
-            session.add(new_allowed_voter)
-            await session.commit()
+            
+            session.add(new_election) 
+            await session.flush()
+            session.add(new_allowed_voter) 
+            
+            await session.commit() 
             await session.refresh(new_election)
             return new_election
-        
-        except DatabaseError:
-            await session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="internal server error"
-            )
         
         except IntegrityError as e:
             await session.rollback()
             error_msg = str(e.orig)
             
-            # Specific error handling for unique name constraints
             if "unique_Creator_election_name" in error_msg:
                 detail = "You have already created an election with this name."
-            elif "foreign_key" in error_msg:
-                detail = "Invalid creator ID. User does not exist."
             else:
-                detail = "A database integrity conflict occurred."
+                detail = "Database integrity error. Check if the name is unique."
 
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=detail
-            )
-    
-    async def delete_election(self, election_details: DeleteElectionInput, creator_id: str, session: AsyncSession):
-        """Removes an election and triggers cascading deletes for positions/candidates."""
-        await self.verify_creator(creator_id, election_details.election_id, session)
-        
-        statement = select(Election).where(Election.id == election_details.election_id)
-        try:
-            result = await session.exec(statement)
-            election = result.first()
-
-            if election:
-                await session.delete(election)
-                await session.commit()
-                return True
-            
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="election not found"
-            )
-        except DatabaseError:
-            await session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="internal server error"
-            )
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
         
     async def create_position(self, creator_id, position_details: CreatePositionInput, session: AsyncSession):
         """Adds a category (e.g., 'President') to an existing election."""
@@ -178,13 +140,6 @@ class ElectionServices:
             await session.refresh(new_position)
             return new_position
         
-        except DatabaseError:
-            await session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="internal server error"
-            )
-        
         except IntegrityError as e:
             await session.rollback()
             error_msg = str(e.orig)
@@ -198,6 +153,15 @@ class ElectionServices:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=detail
             )
+        
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
+        
+        
         
     async def delete_position(self, position_details: DeletePositionInput, creator_id: str, session: AsyncSession):
         """Removes a position and its associated candidates."""
@@ -264,6 +228,12 @@ class ElectionServices:
                 status_code=status.HTTP_409_CONFLICT, 
                 detail="User is already a candidate for this position"
                 )
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
         
     async def delete_candidate(self, candidate_details: DeleteCandidateInput, creator_id: str, session: AsyncSession):
         """Removes a candidate and their corresponding whitelist record."""
@@ -318,31 +288,38 @@ class ElectionServices:
         already_present_emails = [] 
         unregistered_emails = []
 
-        for email in voters_details.emails:
-            user_data = await self.get_user_by_email(email, session, raise_Exception=False)
-            
-            if user_data.get('success'):
-                u_id = user_data.get('user_id')
-                if u_id in existing_voter_ids:
-                    already_present_emails.append(email)
+        try:
+            for email in voters_details.emails:
+                user_data = await self.get_user_by_email(email, session, raise_Exception=False)
+                
+                if user_data.get('success'):
+                    u_id = user_data.get('user_id')
+                    if u_id in existing_voter_ids:
+                        already_present_emails.append(email)
+                    else:
+                        voters_to_add_ids.append(u_id)
                 else:
-                    voters_to_add_ids.append(u_id)
-            else:
-                unregistered_emails.append(email)
+                    unregistered_emails.append(email)
 
-        for u_id in voters_to_add_ids:
-            allowed_voter = AllowedVoter(
-                user_id=u_id,
-                election_id=voters_details.election_id)
-            session.add(allowed_voter)
+            for u_id in voters_to_add_ids:
+                allowed_voter = AllowedVoter(
+                    user_id=u_id,
+                    election_id=voters_details.election_id)
+                session.add(allowed_voter)
 
-        await session.commit()
+            await session.commit()
 
-        return {
-            "added_count": len(voters_to_add_ids),
-            "already_enrolled": already_present_emails,
-            "not_registered": unregistered_emails
-        }
+            return {
+                "added_count": len(voters_to_add_ids),
+                "already_enrolled": already_present_emails,
+                "not_registered": unregistered_emails
+            }
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
 
     async def delete_allowed_voters(self, creator_id, voters_details: DeleteAllowedVoterInput, session: AsyncSession):
         """Revokes voting privileges for a specific user."""
@@ -410,7 +387,31 @@ class ElectionServices:
                     detail="Election does not exist"
                 )
 
-            return election
+            election_data = {
+                "id": str(election.id),
+                "creator_id": str(election.creator_id),
+                "election_name": election.election_name,
+                "start_time": election.start_time.isoformat(),
+                "stop_time": election.stop_time.isoformat(),
+                "created_at": election.created_at.isoformat(),
+                "positions": [
+                    {
+                        "id": str(pos.id),
+                        "position_name": pos.position_name,
+                        "candidates": [
+                            {
+                                "id": str(cand.id),
+                                "user_id": str(cand.user_id),
+                                "fullname": cand.fullname,
+                                "nickname": cand.nickname,
+                            }
+                            for cand in pos.candidates
+                        ]
+                    }
+                    for pos in election.positions
+                ]
+            }
+            return election_data
 
         except DatabaseError:
             raise HTTPException(
