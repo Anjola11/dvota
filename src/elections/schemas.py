@@ -107,6 +107,10 @@ class DeleteAllowedVoterResponse(BaseModel):
     message: str
     data: dict = {}
 
+class GetElectionDetailsResponse(BaseModel):
+    success: bool
+    message: str
+    data: dict = {}
 
 class VoteInput(BaseModel):
     election_id: uuid.UUID

@@ -11,7 +11,7 @@ from src.elections.schemas import (
 
     AddAllowedVotersInput,AddedAllowedVotersResponse,
     DeleteAllowedVoterInput,  DeleteAllowedVoterResponse,
-
+    GetElectionDetailsResponse,
     VoteInput, VoteResponse,
     GetElectionResultResponse,
     GetMyBallotResponse
@@ -122,6 +122,20 @@ async def delete_voter(voter_details: DeleteAllowedVoterInput, session: AsyncSes
         "data": {}
         }
 
+@electionRouter.get("/get-election-details/{election_id}", response_model=GetElectionDetailsResponse, status_code=status.HTTP_200_OK) 
+async def get_election_result(
+    election_id: uuid.UUID,
+    user_id: str = Depends(get_current_user), 
+    session: AsyncSession = Depends(get_Session)
+):
+    
+    result = await electionServices.get_election_details(user_id, election_id, session)
+
+    return {
+        "success": True,
+        "message": "Election details fetched successfully",
+        "data": result
+    }
 
 @electionRouter.post("/vote", response_model= VoteResponse, status_code=status.HTTP_201_CREATED)
 async def vote(voter_input: VoteInput, user_id: str = Depends(get_current_user), session: AsyncSession = Depends(get_Session)):

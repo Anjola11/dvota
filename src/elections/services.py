@@ -361,7 +361,55 @@ class ElectionServices:
         except DatabaseError:
             await session.rollback()
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
-    
+        
+    async def get_election_details(self, user_id, election_id, session: AsyncSession):
+        """
+        Retrieves the 'ballot paper' for a voter. 
+        Fetches positions and candidates without exposing vote counts.
+        """
+        
+        # Verify the user is whitelisted for this specific election
+        allowed_statement = select(AllowedVoter).where(
+            AllowedVoter.user_id == user_id,
+            AllowedVoter.election_id == election_id
+        )
+        allowed_result = await session.exec(allowed_statement)
+        
+        if not allowed_result.first():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not whitelisted for this election"
+            )
+
+        # Optimized Eager Loading: Fetch the election structure in 3 optimized steps
+        statement = (
+            select(Election)
+            .where(Election.id == election_id)
+            .options(
+                selectinload(Election.positions)
+                .selectinload(Position.candidates)
+            )
+        )
+
+        try:
+            result = await session.exec(statement)
+            election = result.first()
+
+            if not election:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Election does not exist"
+                )
+
+            return election
+
+        except DatabaseError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error"
+            )
+        
+
     async def vote(self, user_id, voter_input: VoteInput, session: AsyncSession):
         """Cast a vote. Handles timing, whitelist, and double-voting security."""
         election_statement = select(Election).where(Election.id == voter_input.election_id)
