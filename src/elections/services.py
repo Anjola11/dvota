@@ -98,9 +98,18 @@ class ElectionServices:
             start_time=election_details.startTime,
             stop_time=election_details.stopTime
         )
+        
+       
+        new_allowed_voter = AllowedVoter(
+            user_id=creator_id,
+            election_id=new_election.id
+        )
+            
+
 
         try:
             session.add(new_election)
+            session.add(new_allowed_voter)
             await session.commit()
             await session.refresh(new_election)
             return new_election
