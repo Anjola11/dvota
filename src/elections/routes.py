@@ -10,12 +10,17 @@ from src.elections.schemas import (
     DeleteCandidateInput,DeleteCandidateResponse,
 
     AddAllowedVotersInput,AddedAllowedVotersResponse,
-    DeleteAllowedVoterInput,  DeleteAllowedVoterResponse
+    DeleteAllowedVoterInput,  DeleteAllowedVoterResponse,
+
+    VoteInput, VoteResponse,
+    GetElectionResultResponse,
+    GetMyBallotResponse
     )
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.main import get_Session
 
 from src.elections.services import ElectionServices
+import uuid
 
 
 electionRouter = APIRouter()
@@ -116,3 +121,44 @@ async def delete_voter(voter_details: DeleteAllowedVoterInput, session: AsyncSes
         "message": "Voter successfully removed", 
         "data": {}
         }
+
+
+@electionRouter.post("/vote", response_model= VoteResponse, status_code=status.HTTP_201_CREATED)
+async def vote(voter_input: VoteInput, user_id: str = Depends(get_current_user), session: AsyncSession = Depends(get_Session)):
+    await electionServices.vote(user_id,voter_input,session)
+
+    return {
+        "success": True,
+        "message": "vote successful",
+        "data": {}
+    }
+
+@electionRouter.get("/get-election-result/{election_id}", response_model=GetElectionResultResponse, status_code=status.HTTP_200_OK) 
+async def get_election_result(
+    election_id: uuid.UUID,
+    creator_id: str = Depends(get_current_user), 
+    session: AsyncSession = Depends(get_Session)
+):
+    
+    result = await electionServices.get_election_result(creator_id, election_id, session)
+
+    return {
+        "success": True,
+        "message": "Election results fetched successfully",
+        "data": result
+    }
+
+
+@electionRouter.get("/get-my-ballot", response_model=GetMyBallotResponse, status_code=status.HTTP_200_OK)
+async def get_my_ballot(
+    user_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_Session)
+):
+    ballot_list = await electionServices.get_my_ballot(user_id, session)
+
+    return {
+        "success": True,
+        "message": "Election results fetched successfully",
+        "data": ballot_list
+    }
+    

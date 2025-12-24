@@ -109,7 +109,30 @@ class DeleteAllowedVoterResponse(BaseModel):
 
 
 class VoteInput(BaseModel):
-    user_id: uuid.UUID
     election_id: uuid.UUID
     position_id: uuid.UUID 
     candidate_id: uuid.UUID 
+
+class VoteResponse(BaseModel):
+    success: bool
+    message: str
+    data: dict = {}
+
+class GetElectionResultResponse(BaseModel):
+    success: bool
+    message: str
+    data: dict = {}
+
+
+class Ballot(BaseModel):
+    election_id: uuid.UUID
+    election_name: str
+    election_status: str
+    vote_status: str
+    start_time: datetime
+    stop_time: datetime
+
+class GetMyBallotResponse(BaseModel):
+    success: bool
+    message: str
+    data: List[Ballot]
