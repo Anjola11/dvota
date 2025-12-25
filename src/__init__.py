@@ -38,7 +38,7 @@ origins = [
     "http://localhost:5173",  
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
-    "https://dvota.netlify.app/login",
+    "https://dvota.netlify.app",
 ]
 
 app.add_middleware(
