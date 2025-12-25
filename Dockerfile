@@ -1,44 +1,29 @@
-# Use an official Python runtime as a parent image
+# Use a lightweight Python base
 FROM python:3.13-slim
 
-# Set environment variables
-# Prevents Python from writing pyc files to disc
-ENV PYTHONDONTWRITEBYTECODE=1
-# Prevents Python from buffering stdout and stderr
-ENV PYTHONUNBUFFERED=1
+# Install uv for faster dependency management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Set the working directory in the container
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies (needed for some python packages like asyncpg or bcrypt)
+# Enable bytecode compilation and set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies for asyncpg and bcrypt
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file into the container
-COPY requirements.txt .
+# Copy dependency files and install
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-cache
 
-# Install the dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the application code into the container
+# Copy the rest of the application
 COPY . .
 
-# Expose the port the app runs on
-EXPOSE 8000FROM python:3.13-slim
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-# $PORT is required for Heroku and Cloud Run
-CMD uvicorn src:app --host 0.0.0.0 --port $PORT
-
-# Command to run the application using uvicorn
-CMD ["uvicorn", "src:app", "--host", "0.0.0.0", "--port", "8000"]
+# The $PORT environment variable is provided by Heroku at runtime.
+# We use the shell form here to ensure the variable is expanded.
+CMD .venv/bin/uvicorn src:app --host 0.0.0.0 --port $PORT
