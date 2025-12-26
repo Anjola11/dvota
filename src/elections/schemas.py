@@ -56,6 +56,15 @@ class DeletePositionResponse(BaseModel):
     message: str
     data: dict = {}
 
+class CheckUserByEmailInput(BaseModel):
+    email: EmailStr
+
+class CheckUserByEmailResponse(BaseModel):
+    success: bool
+    message: str
+    data: dict = {}
+
+
 class Candidate(BaseModel):
     id: uuid.UUID 
     user_id: uuid.UUID 
@@ -65,7 +74,7 @@ class Candidate(BaseModel):
 
 class CreateCandidateInput(BaseModel):
     election_id: uuid.UUID
-    email: str
+    email: EmailStr
     fullname: str
     nickname: Optional[str] = None
     position_id: uuid.UUID

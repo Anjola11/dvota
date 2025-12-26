@@ -6,6 +6,8 @@ from src.elections.schemas import (
 
     CreatePositionInput,CreatePositionResponse,DeletePositionInput,DeletePositionResponse,
 
+    CheckUserByEmailInput,CheckUserByEmailResponse,
+
     CreateCandidateInput,CreateCandidateResponse,
     DeleteCandidateInput,DeleteCandidateResponse,
 
@@ -74,6 +76,20 @@ async def delete_position(position_details: DeletePositionInput, session: AsyncS
         "message": "position successfully deleted", 
         "data": {}
         }
+
+
+@electionRouter.post("/check-user", status_code=status.HTTP_200_OK, response_model=CheckUserByEmailResponse)
+async def check_user(user_input: CheckUserByEmailInput, session: AsyncSession = Depends(get_Session)):
+    user = await electionServices.get_user_by_email(user_input.email, session, raise_Exception=True)
+
+    if user:
+        return {
+        "success": True,
+        "message": "User exists",
+        "data": {}
+    }
+
+
 
 @electionRouter.post("/add-candidate", response_model=CreateCandidateResponse, status_code=status.HTTP_201_CREATED)
 async def add_candidate(

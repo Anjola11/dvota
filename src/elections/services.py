@@ -1,6 +1,7 @@
 from src.elections.schemas import (
     CreateElectionInput, 
     CreatePositionInput, 
+    CheckUserByEmailInput,
     CreateCandidateInput,
     DeleteElectionInput,
     DeletePositionInput,
