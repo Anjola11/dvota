@@ -123,15 +123,10 @@ class ElectionServices:
             stop_time=election_details.stop_time
         )
         
-        new_allowed_voter = AllowedVoter(
-            user_id=creator_id,
-            election_id=new_election.id 
-        )
+        
 
         try:
-            session.add(new_election) 
-            await session.flush() # Ensure ID generation before adding allowed voter
-            session.add(new_allowed_voter) 
+            session.add(new_election)
             
             await session.commit() 
             await session.refresh(new_election)
@@ -434,27 +429,51 @@ class ElectionServices:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
         
     async def get_election_details(self, user_id, election_id, session: AsyncSession):
-        """Retrieves election structure (positions/candidates) for whitelisted users.
+        """Retrieves full election structure for authorized creators or whitelisted voters.
         
+        Fetches the hierarchy of positions and candidates while enforcing access 
+        control. If the requestor is the admin, also returns the voter email list.
+
         Args:
-            user_id: The UUID of the requesting user.
-            election_id: The UUID of the election.
+            user_id: UUID of the user requesting details.
+            election_id: UUID of the election to retrieve.
+            session: The asynchronous database session.
+
+        Returns:
+            A dictionary containing serialized election data and participant info.
         """
+        # Initial check to verify election existence
+        statement = select(Election).where(Election.id == election_id)
+
+        try:
+            result = await session.exec(statement)
+            election = result.first()
+        except DatabaseError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
         
-        # Security: Check whitelist before loading data
+        if not election:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="election does not exist"
+            )
+        
+        # Security: Verify user is either whitelisted or the election creator
         allowed_statement = select(AllowedVoter).where(
             AllowedVoter.user_id == user_id,
             AllowedVoter.election_id == election_id
         )
         allowed_result = await session.exec(allowed_statement)
         
-        if not allowed_result.first():
+        if not allowed_result.first() and str(user_id) != election.creator_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You are not whitelisted for this election"
             )
 
-        # Use eager loading to fetch full election tree in optimized queries
+        # Eager load Positions -> Candidates to avoid N+1 query overhead
         statement = (
             select(Election)
             .where(Election.id == election_id)
@@ -474,7 +493,7 @@ class ElectionServices:
                     detail="Election does not exist"
                 )
             
-            # Fetch email list if the requestor is the admin
+            # Fetch full participant list only if the requestor is the admin
             allowed_voters_list = None
             if str(election.creator_id) == str(user_id):
                 voters_statement = select(User.email).join(
@@ -485,6 +504,7 @@ class ElectionServices:
                 result = await session.exec(voters_statement)
                 allowed_voters_list = result.all()
                 
+            # Serialize the nested object structure into a response dictionary
             election_data = {
                 "id": str(election.id),
                 "creator_id": str(election.creator_id),
