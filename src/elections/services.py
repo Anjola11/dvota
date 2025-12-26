@@ -467,7 +467,7 @@ class ElectionServices:
         )
         allowed_result = await session.exec(allowed_statement)
         
-        if not allowed_result.first() and str(user_id) != election.creator_id:
+        if not allowed_result.first() and str(user_id) != str(election.creator_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You are not whitelisted for this election"
