@@ -687,21 +687,37 @@ class ElectionServices:
                 detail="Internal server error"
             )
         
-    async def get_my_ballot(self, user_id, session):
-        """Aggregates all elections a user is whitelisted for with their voting status.
+    async def get_my_ballot(self, user_id, session: AsyncSession):
+        """Retrieves eligible ballots for a user, including created and whitelisted elections.
         
+        This method fetches all elections relevant to a user in a single pass using 
+        optimized eager loading. It merges created and whitelisted elections, 
+        deduplicates them, and calculates the voting status and lifecycle phase.
+
         Args:
-            user_id: UUID of the user.
+            user_id: The UUID of the user requesting their dashboard.
+            session: The asynchronous database session.
+
+        Returns:
+            A list of dictionaries representing the user's election dashboard data.
         """
+        # Fetch user with nested relationships for whitelists, ownership, and vote history
         user_statement = select(User).where(
             User.user_id == user_id
         ).options(
             selectinload(User.allowed_elections).selectinload(Election.positions),
+            selectinload(User.election_created).selectinload(Election.positions),
             selectinload(User.position_voted)
         )
 
-        result = await session.exec(user_statement)
-        user = result.first()
+        try:
+            result = await session.exec(user_statement)
+            user = result.first()
+        except DatabaseError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
           
         if not user:
             raise HTTPException(
@@ -709,18 +725,23 @@ class ElectionServices:
                 detail="user not found"
             )
         
-        # Fast lookup set for voted positions
+        # Merge created and whitelisted elections; deduplicate via ID-keyed dictionary
+        elections_combined = (user.allowed_elections + user.election_created)
+        relevant_elections = {e.id: e for e in elections_combined}
+        
+        # Convert voted positions into a set for O(1) membership testing
         position_voted_id = {p.id for p in user.position_voted}
 
         ballot_list = []
         now = datetime.now(timezone.utc)
 
-        for election in user.allowed_elections:
-            # Determine if user has cast a vote in any position of this election
+        # Process each unique election object
+        for election in relevant_elections.values():
+            # Check if user has participated in any position within this election
             has_voted = any(p.id in position_voted_id for p in election.positions)
             vote_status = "voted" if has_voted else "not voted"
 
-            # Calculate election lifecycle state
+            # Dynamic lifecycle status calculation
             election_status = "upcoming"
             if election.stop_time > now and now > election.start_time:
                 election_status = "active"
@@ -728,6 +749,7 @@ class ElectionServices:
             if election.stop_time < now:
                 election_status = "ended"
 
+            # Prepare serialized ballot data
             ballot = {
                 "election_id": election.id,
                 "election_name": election.election_name,
