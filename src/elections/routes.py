@@ -44,7 +44,7 @@ creator_id: str = Depends(get_current_user), ):
 async def delete_election(election_details: DeleteElectionInput, session: AsyncSession = Depends(get_Session),
 creator_id: str = Depends(get_current_user), ):
 
-    await electionServices.delete_election(election_details, creator_id, session)
+    await electionServices.delete_election(election_details,creator_id, session)
 
     return {
         "success": True,

@@ -125,6 +125,31 @@ class ElectionServices:
                 detail = "Database integrity error. Check if the name is unique."
 
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    
+    async def delete_election(self, election_details: DeleteElectionInput, creator_id: str, session: AsyncSession):
+        """Removes a position and its associated candidates."""
+        await self.verify_creator(creator_id,election_details.election_id, session)
+        
+        statement = select(Election).where(Election.id == election_details.election_id)
+        try:
+            result = await session.exec(statement)
+            election = result.first()
+
+            if election:
+                await session.delete(election)
+                await session.commit()
+                return True
+            
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Election not found"
+            )
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
         
     async def create_position(self, creator_id, position_details: CreatePositionInput, session: AsyncSession):
         """Adds a category (e.g., 'President') to an existing election."""
