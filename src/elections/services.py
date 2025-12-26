@@ -412,7 +412,16 @@ class ElectionServices:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Election does not exist"
                 )
-
+            
+            allowed_voters_list = None
+            if str(election.creator_id) == str(user_id):
+                voters_statement = select(User.email).join(
+                    AllowedVoter, AllowedVoter.user_id == User.user_id
+                    ).where(
+                        AllowedVoter.election_id == election_id
+                    )
+                result = await session.exec(voters_statement)
+                allowed_voters_list = result.all()
             election_data = {
                 "id": str(election.id),
                 "creator_id": str(election.creator_id),
@@ -435,7 +444,8 @@ class ElectionServices:
                         ]
                     }
                     for pos in election.positions
-                ]
+                ],
+                "allowed_voters": allowed_voters_list
             }
             return election_data
 
