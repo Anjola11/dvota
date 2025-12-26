@@ -401,7 +401,7 @@ class ElectionServices:
                 detail="internal server error"
             )
 
-    async def delete_allowed_voters(self, creator_id, voters_details: DeleteAllowedVoterInput, session: AsyncSession):
+    async def delete_allowed_voter(self, creator_id, voters_details: DeleteAllowedVoterInput, session: AsyncSession):
         """Removes a specific user's voting rights for an election.
         
         Args:
