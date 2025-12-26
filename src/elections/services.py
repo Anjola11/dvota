@@ -625,6 +625,7 @@ class ElectionServices:
                 "election_id": election.id,
                 "election_name": election.election_name,
                 "election_status": election_status,
+                "creator_id": election.creator_id,
                 "vote_status": vote_status,
                 "start_time": election.start_time,
                 "stop_time": election.stop_time

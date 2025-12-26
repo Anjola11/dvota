@@ -141,6 +141,7 @@ class Ballot(BaseModel):
     election_id: uuid.UUID
     election_name: str
     election_status: str
+    creator_id: uuid.UUID
     vote_status: str
     start_time: datetime
     stop_time: datetime
