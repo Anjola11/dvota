@@ -555,6 +555,8 @@ class ElectionServices:
                                 "user_id": str(cand.user_id),
                                 "fullname": cand.fullName,
                                 "nickname": cand.nickname,
+                                "candidate_picture_url": cand.candidate_picture_url,
+                                
                             }
                             for cand in pos.candidates
                         ]
