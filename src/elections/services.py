@@ -387,6 +387,7 @@ class ElectionServices:
         """
         await self.verify_creator(creator_id, voters_details.election_id, session)
 
+        
         # Pre-fetch existing voter IDs to prevent double entry
         statement = select(AllowedVoter.user_id).where(AllowedVoter.election_id == voters_details.election_id)
         result = await session.exec(statement)
@@ -396,12 +397,20 @@ class ElectionServices:
         already_present_emails = [] 
         unregistered_emails = []
 
+
+
         try:
             for email in voters_details.emails:
                 user_data = await self.get_user_by_email(email, session, raise_Exception=False)
                 
                 if user_data.get('success'):
                     u_id = user_data.get('user_id')
+
+                    if str(u_id) == str(creator_id):
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="you can add yourself as a voter in this election"
+                        )
                     if u_id in existing_voter_ids:
                         already_present_emails.append(email)
                     else:
