@@ -11,15 +11,17 @@ from src.auth.models import User
 from src.auth.schemas import UserInput, VerifyOtpInput, LoginInput, ForgotPasswordInput, ResetPasswordInput, RenewAccessTokenInput
 from src.emailServices.schemas import OtpTypes
 from sqlmodel.ext.asyncio.session import AsyncSession
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 from sqlalchemy.exc import DatabaseError
 from src.utils.auth import generate_password_hash, verify_password_hash, create_token, decode_token
 from src.auth.models import SignupOtp, ForgotPasswordOtp
 from datetime import datetime, timezone, timedelta
 import uuid
 from src.db.redis import redis_client
+from src.file_uploads.services import FileUploadServices
 
 
+file_upload_service = FileUploadServices()
 # Token expiration configurations
 access_token_expiry = timedelta(hours=2)
 refresh_token_expiry = timedelta(days=3)
@@ -238,7 +240,7 @@ class AuthServices:
         user_dict = user.model_dump()
         access_token = create_token(user_dict, access_token_expiry, type="access")
         refresh_token = create_token(user_dict, refresh_token_expiry, type="refresh")
-
+        user_dict['profile_picture_url'] = user.profile_picture_url
         # Combine user data with tokens
         user_details = {
             **user_dict, 
@@ -302,6 +304,35 @@ class AuthServices:
                 detail="Internal server error"
             )
         
+    async def upload_profile_picture(self, user_id: str, file: UploadFile, session: AsyncSession):
+        user_statement = select(User).where(User.user_id == uuid.UUID(user_id))
+        result = await session.exec(user_statement)
+
+        user = result.first()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="user not found"
+            )
+        old_profile_picture_id = user.profile_picture_id
+        profile_picture_id = await file_upload_service.upload_image(old_profile_picture_id, file)
+
+        user.profile_picture_id = profile_picture_id
+
+        try:
+            await session.commit()
+            await session.refresh(user)
+
+            return user
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal serval error"
+            )
+        
+        
     async def renewAccessToken(self, renewAccessTokenInput: RenewAccessTokenInput, session: AsyncSession):
        
         refresh_token_str = renewAccessTokenInput.refresh_token
@@ -352,5 +383,7 @@ class AuthServices:
         
         result = await redis_client.get(jti)
         return result is not None
+    
+    
 
         

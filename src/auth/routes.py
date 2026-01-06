@@ -3,7 +3,7 @@
 This module defines the REST API endpoints for user authentication workflows.
 """
 
-from fastapi import APIRouter, Depends, status, BackgroundTasks
+from fastapi import APIRouter, Depends, status, BackgroundTasks, File, UploadFile
 from src.auth.services import AuthServices
 from src.auth.schemas import (
     UserInput, 
@@ -25,6 +25,8 @@ from src.emailServices.schemas import OtpTypes
 from src.utils.auth import create_token
 from datetime import timedelta
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from src.utils.auth import get_current_user
+
 
 reset_password_expiry = timedelta(minutes=5)
 
@@ -157,6 +159,20 @@ async def resetPassword(
         "success": True,
         "message": "password reset successful, proceed to login",
         "data": user
+    }
+
+@authRouter.post("/upload-profile-picture/", status_code=status.HTTP_201_CREATED, response_model=UserCreateResponse)
+async def upload_profile_picture(
+    user_id=Depends(get_current_user), 
+    session: AsyncSession = Depends(get_Session),
+    file: UploadFile = File(...)
+    ):
+    user_new_data = await authServices.upload_profile_picture(user_id, file, session)
+
+    return {
+        "success": True,
+        "message": "profile picture uploaded succesfully",
+        "data": user_new_data
     }
 
 @authRouter.post("/renew_access_token", status_code=status.HTTP_201_CREATED, response_model=RenewAccessTokenResponse)

@@ -9,6 +9,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "bcrypt>=5.0.0",
     "brevo-python>=1.2.0",
+    "cloudinary>=1.44.1",
     "email-validator>=2.3.0",
     "fastapi>=0.124.0",
     "gunicorn>=23.0.0",
@@ -18,6 +19,7 @@ dependencies = [
     "pyjwt>=2.10.1",
     "python-multipart>=0.0.20",
     "redis>=7.1.0",
+    "shortuuid>=1.0.13",
     "sqlmodel>=0.0.27",
     "uvicorn>=0.38.0",
 ]

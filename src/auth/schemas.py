@@ -4,10 +4,9 @@ This module defines the request and response models used in authentication
 endpoints. Validates data for the simplified, single-user-table architecture.
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
 import uuid
-from typing import Optional
 from src.emailServices.schemas import OtpTypes
 
 # --- INPUT SCHEMAS ---
@@ -33,10 +32,6 @@ class ForgotPasswordInput(BaseModel):
     """Payload for initiating password reset."""
     email: EmailStr
 
-class ResetPasswordInput(BaseModel):
-    """Payload for completing password reset."""
-    new_password: str
-    token: str
 
 # --- OUTPUT/RESPONSE SCHEMAS ---
 
@@ -46,7 +41,10 @@ class User(BaseModel):
     fullName: str
     email: EmailStr 
     email_verified: bool 
+    profile_picture_url: str
     created_at: datetime 
+
+    model_config = ConfigDict(from_attributes=True)
 
 class UserCreateResponse(BaseModel):
     """Response structure for successful signup."""
@@ -60,9 +58,12 @@ class LoginData(BaseModel):
     fullName: str
     email: EmailStr
     email_verified: bool
+    profile_picture_url: str
     created_at: datetime
     access_token: str
     refresh_token: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 class LoginResponse(BaseModel):
     """Response structure for successful login."""

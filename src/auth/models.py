@@ -9,8 +9,10 @@ from sqlmodel import SQLModel, Field, Column, Relationship
 import uuid
 from datetime import datetime, timezone, timedelta
 import sqlalchemy.dialects.postgresql as pg
-from typing import List
+from typing import List, Optional
 from src.elections.models import AllowedVoter, Vote
+import cloudinary.utils
+
 
 
 def utc_now():
@@ -33,10 +35,27 @@ class User(SQLModel, table=True):
     email: str = Field(unique=True, index=True)
     password_hash: str = Field(exclude=True)
     email_verified: bool = False
+    profile_picture_id: Optional[str] = Field(default=None)
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(pg.TIMESTAMP(timezone=True))
     )
+    @property
+    def profile_picture_url(self):
+        if not self.profile_picture_id:
+            return f"https://ui-avatars.com/api/?name={self.fullName}&background=random"
+        
+        url, options = cloudinary.utils.cloudinary_url(
+            self.profile_picture_id,
+            width=200,
+            height=200,
+            crop="fill",
+            gravity="face",
+            quality="auto",
+            fetch_format="auto"
+        )
+
+        return url
 
     #relationships
    # ONE-TO-MANY

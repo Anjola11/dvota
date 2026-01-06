@@ -4,6 +4,8 @@ import uuid
 from datetime import datetime, timezone
 import sqlalchemy.dialects.postgresql as pg
 from sqlalchemy import UniqueConstraint
+from src.utils.elections import create_election_code
+
 
 def utc_now():
     return datetime.now(timezone.utc)
