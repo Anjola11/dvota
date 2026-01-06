@@ -153,8 +153,8 @@ class Candidate(SQLModel, table = True):
         
         url, options = cloudinary.utils.cloudinary_url(
             self.candidate_picture_id,
-            width=200,
-            height=200,
+            width=500,
+            height=500,
             crop="fill",
             gravity="face",
             quality="auto",
