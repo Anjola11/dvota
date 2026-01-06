@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, UploadFile, File
 from src.utils.auth import get_current_user
 from src.elections.schemas import (
     CreateElectionInput, CreateElectionResponse,
@@ -114,6 +114,22 @@ async def delete_candidate(candidate_details: DeleteCandidateInput, session: Asy
         "message": "candidate successfully deleted", 
         "data": {}}
 
+@electionRouter.post("/{election_id}/candidates/{candidate_id}/picture", status_code=status.HTTP_201_CREATED, response_model=CreateCandidateResponse)
+async def upload_profile_picture(
+    election_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    creator_id=Depends(get_current_user),
+    session: AsyncSession = Depends(get_Session),
+    file: UploadFile = File(...)
+    ):
+    candidate_new_data = await electionServices.upload_candidate_picture(creator_id, election_id, candidate_id, file, session)
+
+    return {
+        "success": True,
+        "message": "profile picture uploaded succesfully",
+        "data": candidate_new_data
+    }
+
 @electionRouter.post("/add-allowed-voters", response_model=AddedAllowedVotersResponse, status_code=status.HTTP_201_CREATED)
 async def add_voters(
    voter_details: AddAllowedVotersInput,
@@ -154,7 +170,7 @@ async def get_election_result(
     }
 
 @electionRouter.post("/vote", response_model= VoteResponse, status_code=status.HTTP_201_CREATED)
-async def vote(voter_input: VoteInput, user_id: str = Depends(get_current_user), session: AsyncSession = Depends(get_Session)):
+async def vote(voter_input: VoteInput, user_id: uuid.UUID = Depends(get_current_user), session: AsyncSession = Depends(get_Session)):
     await electionServices.vote(user_id,voter_input,session)
 
     return {

@@ -37,17 +37,22 @@ class FileUploadServices:
                 detail="file greater than max size(2mb)"
             )
         
-    async def upload_image(self, old_profile_picture_id, file: UploadFile):
+    async def upload_image(self, old_picture_id, file: UploadFile,  type: str):
         self.validate_file(file)
-
-        file_path = "Dvota/Profiles"
+        
+        file_path = "Dvota/Misc"
+        
+        if type == "profile":
+            file_path = "Dvota/Profiles"
+        elif type == "candidate":
+            file_path = "Dvota/Candidates"
 
          #cleanup logic
-        if old_profile_picture_id:
+        if old_picture_id:
             try:
                 await asyncio.to_thread(
                     destroy,
-                    old_profile_picture_id
+                    old_picture_id
                 )
             except Exception as e:
                print(f"Warning: Failed to delete old image: {e}")
@@ -58,7 +63,7 @@ class FileUploadServices:
         )
 
        
-        profile_picture_id = response['public_id']
+        picture_id = response['public_id']
 
-        return profile_picture_id
+        return picture_id
         

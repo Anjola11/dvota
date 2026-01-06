@@ -316,7 +316,7 @@ class AuthServices:
                 detail="user not found"
             )
         old_profile_picture_id = user.profile_picture_id
-        profile_picture_id = await file_upload_service.upload_image(old_profile_picture_id, file)
+        profile_picture_id = await file_upload_service.upload_image(old_profile_picture_id, file, type="profile")
 
         user.profile_picture_id = profile_picture_id
 

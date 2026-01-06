@@ -9,7 +9,7 @@ from src.elections.schemas import (
     DeleteAllowedVoterInput,
     VoteInput
 )
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.elections.models import Election, Position, Candidate, AllowedVoter, Vote
 from src.auth.models import User
@@ -18,7 +18,10 @@ from sqlalchemy.exc import DatabaseError, IntegrityError
 
 from datetime import datetime, timezone
 from sqlalchemy.orm import selectinload
+from src.file_uploads.services import FileUploadServices
+import uuid
 
+file_upload_service = FileUploadServices()
 
 class ElectionServices:
     """Service layer for election lifecycle, whitelisting, and voting logic."""
@@ -260,7 +263,7 @@ class ElectionServices:
 
         new_candidate = Candidate(
             user_id=user_id,
-            fullname=candidate_details.fullname,
+            fullName=candidate_details.fullName,
             nickname=candidate_details.nickname,
             position_id=candidate_details.position_id
         )
@@ -341,6 +344,36 @@ class ElectionServices:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
                 detail="Internal server error"
                 )
+    async def upload_candidate_picture(self, creator_id, election_id, candidate_id: uuid.UUID, file: UploadFile, session: AsyncSession):
+
+        await self.verify_creator(creator_id, election_id, session)
+
+        candidate_statement = select(Candidate).where(Candidate.id == candidate_id)
+        result = await session.exec(candidate_statement)
+
+        candidate = result.first()
+
+        if not candidate:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="candidate not found"
+            )
+        old_candidate_picture_id = candidate.candidate_picture_id
+        candidate_picture_id = await file_upload_service.upload_image(old_candidate_picture_id, file, type="candidate")
+
+        candidate.candidate_picture_id = candidate_picture_id
+
+        try:
+            await session.commit()
+            await session.refresh(candidate)
+
+            return candidate
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal serval error"
+            )
         
     async def add_allowed_voters(self, creator_id, voters_details: AddAllowedVotersInput, session: AsyncSession):
         """Whitelists a list of users for an election in bulk.
@@ -520,7 +553,7 @@ class ElectionServices:
                             {
                                 "id": str(cand.id),
                                 "user_id": str(cand.user_id),
-                                "fullname": cand.fullname,
+                                "fullname": cand.fullName,
                                 "nickname": cand.nickname,
                             }
                             for cand in pos.candidates
@@ -539,7 +572,7 @@ class ElectionServices:
             )
         
 
-    async def vote(self, user_id, voter_input: VoteInput, session: AsyncSession):
+    async def vote(self, user_id:uuid.UUID, voter_input: VoteInput, session: AsyncSession):
         """Records a vote after verifying timeframe, whitelist, and duplicate status.
         
         Args:
@@ -599,9 +632,13 @@ class ElectionServices:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid candidate selection for this election"
             )
+        
+        # INTEGRITY CHECK: Ensure candidate actually belongs to the position the user claims to vote for
+        if candidate_voted.position_id != voter_input.position_id:
+             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Candidate is not running for this position")
 
         # Perform atomic update on vote count and record audit trail
-        candidate_voted.vote_count += 1
+        candidate_voted.vote_count = Candidate.vote_count + 1
         new_vote = Vote(
             user_id=user_id,
             position_id=candidate_voted.position_id,

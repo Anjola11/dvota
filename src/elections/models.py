@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 import sqlalchemy.dialects.postgresql as pg
 from sqlalchemy import UniqueConstraint
-from src.utils.elections import create_election_code
+import cloudinary.utils
 
 
 def utc_now():
@@ -139,11 +139,29 @@ class Candidate(SQLModel, table = True):
     user_id: uuid.UUID = Field(
         foreign_key="users.user_id"
     )
-    fullname: str
+    fullName: str
     nickname: Optional[str] = None
     vote_count: int = Field(default=0)
     position_id: uuid.UUID = Field(foreign_key="positions.id", ondelete="CASCADE")
+    candidate_picture_id: Optional[str] = Field(default=None)
 
+    @property
+    def candidate_picture_url(self):
+
+        if not self.candidate_picture_id:
+            return f"https://ui-avatars.com/api/?name={self.fullName}&background=random"
+        
+        url, options = cloudinary.utils.cloudinary_url(
+            self.candidate_picture_id,
+            width=200,
+            height=200,
+            crop="fill",
+            gravity="face",
+            quality="auto",
+            fetch_format="auto"
+        )
+
+        return url
     #relationship
     position: Optional["Position"] = Relationship(
         back_populates="candidates"

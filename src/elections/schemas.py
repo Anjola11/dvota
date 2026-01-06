@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
 import uuid
 from typing import Optional, List
@@ -68,14 +68,17 @@ class CheckUserByEmailResponse(BaseModel):
 class Candidate(BaseModel):
     id: uuid.UUID 
     user_id: uuid.UUID 
-    fullname: str
+    fullName: str
     nickname: Optional[str] = None
     position_id: uuid.UUID 
+    candidate_picture_url: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 class CreateCandidateInput(BaseModel):
     election_id: uuid.UUID
     email: EmailStr
-    fullname: str
+    fullName: str
     nickname: Optional[str] = None
     position_id: uuid.UUID
 
