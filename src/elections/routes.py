@@ -154,7 +154,7 @@ async def delete_candidate(candidate_details: DeleteCandidateInput, session: Asy
         "data": {}}
 
 @electionRouter.post("/{election_id}/candidates/{candidate_id}/picture", status_code=status.HTTP_201_CREATED, response_model=CreateCandidateResponse)
-async def upload_profile_picture(
+async def upload_candidate_picture(
     election_id: uuid.UUID,
     candidate_id: uuid.UUID,
     creator_id=Depends(get_current_user),

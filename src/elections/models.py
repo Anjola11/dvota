@@ -136,9 +136,6 @@ class Candidate(SQLModel, table = True):
     __tablename__ = "candidates"
     
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID = Field(
-        foreign_key="users.user_id"
-    )
     fullName: str
     nickname: Optional[str] = None
     vote_count: int = Field(default=0)

@@ -417,11 +417,16 @@ class ElectionServices:
         """
         await self.verify_creator(creator_id, election_id=candidate_details.election_id, session=session)
 
-        user = await self.get_user_by_email(candidate_details.email, session, raise_Exception=True)
-        user_id = user.get('user_id')
+        #left it if I want to implement users must have an registred account
+
+        # user = await self.get_user_by_email(candidate_details.email, session, raise_Exception=True)
+        # user_id = user.get('user_id')
 
         new_candidate = Candidate(
-            user_id=user_id,
+
+            #left it if I want to implement users must have an registred account
+            #user_id=candidate_details.user_id
+
             fullName=candidate_details.fullName,
             nickname=candidate_details.nickname,
             position_id=candidate_details.position_id
@@ -430,18 +435,20 @@ class ElectionServices:
         try:
             session.add(new_candidate)
             
-            # Auto-whitelist logic
-            stmt = select(AllowedVoter).where(
-                AllowedVoter.user_id == user_id, 
-                AllowedVoter.election_id == candidate_details.election_id
-            )
-            existing = await session.exec(stmt)
-            if not existing.first():
-                new_allowed_voter = AllowedVoter(
-                    user_id=user_id,
-                    election_id=candidate_details.election_id
-                )
-                session.add(new_allowed_voter)
+            #left it if I want to implement users must have an registred account
+
+            # # Auto-whitelist logic
+            # stmt = select(AllowedVoter).where(
+            #     AllowedVoter.user_id == user_id, 
+            #     AllowedVoter.election_id == candidate_details.election_id
+            # )
+            # existing = await session.exec(stmt)
+            # if not existing.first():
+            #     new_allowed_voter = AllowedVoter(
+            #         user_id=user_id,
+            #         election_id=candidate_details.election_id
+            #     )
+            #     session.add(new_allowed_voter)
 
             await session.commit()
             await session.refresh(new_candidate)
@@ -552,24 +559,27 @@ class ElectionServices:
                 detail="Candidate not found"
                 )
 
-        candidate_user_id = candidate.user_id
+        #left it if I want to implement users must have an registred account
+        # candidate_user_id = candidate.user_id
 
         try:
             await session.delete(candidate)
+            
+            #left it if I want to implement users must have an registred account
 
-            # Cleanup whitelist
-            voter_stmt = select(AllowedVoter).where(
-                AllowedVoter.user_id == candidate_user_id,
-                AllowedVoter.election_id == candidate_details.election_id
-            )
-            voter_result = await session.exec(voter_stmt)
-            voter_record = voter_result.first()
+            # # Cleanup whitelist
+            # voter_stmt = select(AllowedVoter).where(
+            #     AllowedVoter.user_id == candidate_user_id,
+            #     AllowedVoter.election_id == candidate_details.election_id
+            # )
+            # voter_result = await session.exec(voter_stmt)
+            # voter_record = voter_result.first()
 
-            if voter_record:
-                await session.delete(voter_record)
+            # if voter_record:
+            #     await session.delete(voter_record)
 
-            await session.commit()
-            return True
+            # await session.commit()
+            # return True
 
         except DatabaseError:
             await session.rollback()

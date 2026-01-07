@@ -79,7 +79,10 @@ class CheckUserByEmailResponse(BaseModel):
 
 class Candidate(BaseModel):
     id: uuid.UUID 
-    user_id: uuid.UUID 
+
+    #left it if I want to implement users must have an registred account
+
+    # user_id: uuid.UUID 
     fullName: str
     nickname: Optional[str] = None
     position_id: uuid.UUID 
@@ -89,7 +92,10 @@ class Candidate(BaseModel):
 
 class CreateCandidateInput(BaseModel):
     election_id: uuid.UUID
-    email: EmailStr
+
+    #left it if I want to implement users must have an registred account
+    
+    # email: EmailStr
     fullName: str
     nickname: Optional[str] = None
     position_id: uuid.UUID
