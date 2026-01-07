@@ -800,7 +800,10 @@ class ElectionServices:
                         "candidates": [
                             {
                                 "id": str(cand.id),
-                                "user_id": str(cand.user_id),
+
+                                #left it if I want to implement users must have an registred account
+                                
+                                # "user_id": str(cand.user_id),
                                 "fullname": cand.fullName,
                                 "nickname": cand.nickname,
                                 "candidate_picture_url": cand.candidate_picture_url,
