@@ -24,6 +24,12 @@ class CreateElectionResponse(BaseModel):
     message: str
     data: Election
 
+class UpdateElectionDetailsInput(BaseModel):
+    election_id: uuid.UUID
+    election_name: Optional[str]
+    start_time: Optional[datetime]
+    stop_time: Optional[datetime]
+
 class DeleteElectionInput(BaseModel):
     election_id: uuid.UUID
 

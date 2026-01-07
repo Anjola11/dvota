@@ -2,6 +2,7 @@ from src.elections.schemas import (
     CreateElectionInput, 
     CreatePositionInput, 
     CreateCandidateInput,
+    UpdateElectionDetailsInput,
     DeleteElectionInput,
     DeletePositionInput,
     DeleteCandidateInput,
@@ -145,6 +146,79 @@ class ElectionServices:
                 detail = "Database integrity error. Check if the name is unique."
 
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+        
+    async def update_election_details(self, update_election_details_input:UpdateElectionDetailsInput, creator_id: str, session: AsyncSession):
+        await self.verify_creator(creator_id,update_election_details_input.election_id, session)
+
+
+        statement = select(Election).where(Election.id == update_election_details_input.election_id)
+
+        try:
+            result = await session.exec(statement)
+            election = result.first()
+
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
+        
+        if not election:
+                
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Election not found"
+            )
+        
+    
+        datetime_now = datetime.now(timezone.utc)
+
+        new_start = update_election_details_input.start_time or election.start_time
+
+        new_stop = update_election_details_input.stop_time or election.stop_time
+
+        if new_start < new_stop:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="stopTime must be greater than startTime"
+            )
+
+        #fix issue, if it has started, you don't want to run into the issue of you can't edit stop time if election has started
+        if new_start < datetime_now:
+
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail = "startime must be greater than the current time"
+            )
+        
+        if election.start_time > datetime and election.stop_time > datetime_now:
+            if update_election_details_input.stop_time:
+                raise HTTPException(
+                    status_code= status.HTTP_403_FORBIDDEN,
+                    detail="you can only change the stop time since election has started"
+                )
+
+
+
+        for key, value in update_election_details_input.model_dump().items():
+            if value:
+                setattr(election, key, value)
+
+            try:
+                await session.commit()
+                await session.refresh(election)
+                return election
+            except DatabaseError:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="internal server error"
+                )
+
+        
+        
+
     
     async def delete_election(self, election_details: DeleteElectionInput, creator_id: str, session: AsyncSession):
         """Permanently deletes an election and all cascading relationships.
