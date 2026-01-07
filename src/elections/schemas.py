@@ -26,9 +26,9 @@ class CreateElectionResponse(BaseModel):
 
 class UpdateElectionDetailsInput(BaseModel):
     election_id: uuid.UUID
-    election_name: Optional[str]
-    start_time: Optional[datetime]
-    stop_time: Optional[datetime]
+    election_name: Optional[str] = None
+    start_time: Optional[datetime] = None
+    stop_time: Optional[datetime] = None
 
 class DeleteElectionInput(BaseModel):
     election_id: uuid.UUID
@@ -62,6 +62,12 @@ class DeletePositionResponse(BaseModel):
     message: str
     data: dict = {}
 
+class UpdatePositionDetailsInput(BaseModel):
+    election_id: uuid.UUID
+    position_id: uuid.UUID
+    position_name: Optional[str] = None
+  
+
 class CheckUserByEmailInput(BaseModel):
     email: EmailStr
 
@@ -92,6 +98,12 @@ class CreateCandidateResponse(BaseModel):
     success: bool
     message: str
     data: Candidate
+
+class UpdateCandidateDetailsInput(BaseModel):
+    election_id: uuid.UUID
+    candidate_id: uuid.UUID
+    fullName: Optional[str] = None
+    nickname: Optional[str] = None
 
 class DeleteCandidateInput(BaseModel):
     election_id: uuid.UUID

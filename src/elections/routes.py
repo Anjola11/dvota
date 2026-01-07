@@ -4,12 +4,15 @@ from src.elections.schemas import (
     CreateElectionInput, CreateElectionResponse,
     DeleteElectionInput,DeleteElectionResponse,
 
-    CreatePositionInput,CreatePositionResponse,DeletePositionInput,DeletePositionResponse,
+    UpdateElectionDetailsInput,
+
+    CreatePositionInput,CreatePositionResponse,DeletePositionInput,DeletePositionResponse,UpdatePositionDetailsInput,
 
     CheckUserByEmailInput,CheckUserByEmailResponse,
 
     CreateCandidateInput,CreateCandidateResponse,
     DeleteCandidateInput,DeleteCandidateResponse,
+    UpdateCandidateDetailsInput,
 
     AddAllowedVotersInput,AddedAllowedVotersResponse,
     DeleteAllowedVoterInput,  DeleteAllowedVoterResponse,
@@ -52,6 +55,18 @@ creator_id: str = Depends(get_current_user), ):
         "data": {}
     }
 
+@electionRouter.patch("/edit-election", response_model=CreateElectionResponse, status_code=status.HTTP_201_CREATED)
+async def update_election(update_election_details_input:UpdateElectionDetailsInput, session: AsyncSession = Depends(get_Session),
+creator_id: str = Depends(get_current_user)):
+
+    election = await electionServices.update_election_details(update_election_details_input,creator_id,session)
+
+    return {
+        "success": True,
+        "message": "election successfuly updated",
+        "data": election
+    }
+
 
 @electionRouter.post("/add-position", response_model=CreatePositionResponse, status_code=status.HTTP_201_CREATED)
 async def add_position(
@@ -64,6 +79,18 @@ async def add_position(
     return {
         "success": True,
         "message": "position successfuly added",
+        "data": position
+    }
+
+@electionRouter.patch("/edit-position", response_model=CreatePositionResponse, status_code=status.HTTP_201_CREATED)
+async def update_position(update_position_details_input:UpdatePositionDetailsInput, session: AsyncSession = Depends(get_Session),
+creator_id: str = Depends(get_current_user)):
+
+    position = await electionServices.update_position_details(update_position_details_input, creator_id, session)
+
+    return {
+        "success": True,
+        "message": "position successfuly updated",
         "data": position
     }
 
@@ -103,6 +130,18 @@ async def add_candidate(
         "message": "position successfuly added",
         "data": candidate
    }
+
+@electionRouter.patch("/edit-candidate", response_model=CreateCandidateResponse, status_code=status.HTTP_201_CREATED)
+async def update_candidate(update_candidate_details_input:UpdateCandidateDetailsInput, session: AsyncSession = Depends(get_Session),
+creator_id: str = Depends(get_current_user)):
+
+    candidate = await electionServices.update_candidate_details(update_candidate_details_input, creator_id, session)
+
+    return {
+        "success": True,
+        "message": "candidate successfuly updated",
+        "data": candidate
+    }
 
 
 @electionRouter.delete("/delete-candidate", response_model=DeleteCandidateResponse, status_code=status.HTTP_200_OK)

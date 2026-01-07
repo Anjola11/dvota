@@ -5,6 +5,8 @@ from src.elections.schemas import (
     UpdateElectionDetailsInput,
     DeleteElectionInput,
     DeletePositionInput,
+    UpdatePositionDetailsInput,
+    UpdateCandidateDetailsInput,
     DeleteCandidateInput,
     AddAllowedVotersInput,
     DeleteAllowedVoterInput,
@@ -178,43 +180,56 @@ class ElectionServices:
 
         new_stop = update_election_details_input.stop_time or election.stop_time
 
-        if new_start < new_stop:
+        if new_start >= new_stop:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="stopTime must be greater than startTime"
             )
 
-        #fix issue, if it has started, you don't want to run into the issue of you can't edit stop time if election has started
-        if new_start < datetime_now:
-
+        
+        if update_election_details_input.start_time and new_start < datetime_now:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail = "startime must be greater than the current time"
+                detail = "start_time must be in the future"
             )
         
-        if election.start_time > datetime and election.stop_time > datetime_now:
-            if update_election_details_input.stop_time:
+        if new_stop < datetime_now and new_stop != election.stop_time:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail = "stoptime must be greater than the current time"
+            )
+        
+        if election.start_time <= datetime_now:
+
+            if update_election_details_input.start_time:
+
                 raise HTTPException(
-                    status_code= status.HTTP_403_FORBIDDEN,
-                    detail="you can only change the stop time since election has started"
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Election has already started. You cannot change the start time."
                 )
 
 
 
-        for key, value in update_election_details_input.model_dump().items():
-            if value:
-                setattr(election, key, value)
+        for key, value in update_election_details_input.model_dump(exclude_unset=True).items():
+            
+            if value is None:
+                continue
+            
+            if isinstance(value, str) and value.strip() == "":
+                continue
 
-            try:
-                await session.commit()
-                await session.refresh(election)
-                return election
-            except DatabaseError:
-                await session.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="internal server error"
-                )
+            setattr(election, key, value)
+
+        try:
+            await session.commit()
+            await session.refresh(election)
+            return election
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
 
         
         
@@ -322,6 +337,79 @@ class ElectionServices:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="internal server error"
             )
+    
+    async def update_position_details(self, update_position_details_input:UpdatePositionDetailsInput, creator_id: str, session: AsyncSession):
+            await self.verify_creator(creator_id,update_position_details_input.election_id, session)
+
+            statement = select(Position).where(Position.id == update_position_details_input.position_id).options(
+                selectinload(Position.election)
+            )
+
+            try:
+                result = await session.exec(statement)
+                position = result.first()
+                if position.election_id != update_position_details_input.election_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="you are not authorized to edit this position"
+                    )
+
+            except DatabaseError:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="internal server error"
+                )
+            
+            if not position:
+                    
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="position not found"
+                )
+            
+
+            
+        
+            datetime_now = datetime.now(timezone.utc)
+
+            
+            
+            if position.election.start_time <= datetime_now:
+
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can't edit the position, the election has started"
+                )
+
+            
+            input_data = update_position_details_input.model_dump(exclude_unset=True)
+            input_data.pop("election_id", None)
+            input_data.pop("position_id", None)
+
+            for key, value in input_data.items():
+                # SAFETY CHECK: Prevent setting name to null or empty string
+                if value is None:
+                    continue
+                
+                if isinstance(value, str) and value.strip() == "":
+                    continue
+
+                setattr(position, key, value)
+        
+
+
+            try:
+                await session.commit()
+                await session.refresh(position)
+                return position
+            except DatabaseError:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="internal server error"
+                )
+
         
     async def create_candidates(self, creator_id, candidate_details: CreateCandidateInput, session: AsyncSession):
         """Registers a candidate and ensures they are whitelisted as a voter.
@@ -374,6 +462,77 @@ class ElectionServices:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="internal server error"
             )
+    async def update_candidate_details(self, update_candidate_details_input:UpdateCandidateDetailsInput, creator_id: str, session: AsyncSession):
+            await self.verify_creator(creator_id,update_candidate_details_input.election_id, session)
+
+            statement = select(Candidate).where(Candidate.id == update_candidate_details_input.candidate_id).options(
+                selectinload(Candidate.position).selectinload(Position.election)
+            )
+
+            try:
+                result = await session.exec(statement)
+                candidate = result.first()
+                if candidate.position.election_id != update_candidate_details_input.election_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="you are not authorized to edit this candidate"
+                    )
+
+            except DatabaseError:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="internal server error"
+                )
+            
+            if not candidate:
+                    
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="candidate not found"
+                )
+            
+
+            
+        
+            datetime_now = datetime.now(timezone.utc)
+
+            
+            
+            if candidate.position.election.start_time <= datetime_now:
+
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can't edit the candidate, the election has started"
+                )
+
+            
+            input_data = update_candidate_details_input.model_dump(exclude_unset=True)
+            input_data.pop("election_id", None)
+            input_data.pop("candidate_id", None)
+
+            for key, value in input_data.items():
+                # SAFETY CHECK: Prevent setting name to null or empty string
+                if value is None:
+                    continue
+                
+                if isinstance(value, str) and value.strip() == "":
+                    continue
+
+                setattr(candidate, key, value)
+        
+
+
+            try:
+                await session.commit()
+                await session.refresh(candidate)
+                return candidate
+            except DatabaseError:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="internal server error"
+                )
         
     async def delete_candidate(self, candidate_details: DeleteCandidateInput, creator_id: str, session: AsyncSession):
         """Deletes a candidate and removes their associated whitelist record.
