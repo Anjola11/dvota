@@ -4,7 +4,7 @@ import cloudinary
 from cloudinary.uploader import upload, destroy
 import asyncio
 
-max_upload_bytes = 2 * 1024 * 1024
+max_upload_bytes = 5 * 1024 * 1024
 
 cloudinary.config(
     cloud_name=Config.CLOUDINARY_CLOUD_NAME,
