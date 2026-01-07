@@ -27,18 +27,27 @@ import uuid
 file_upload_service = FileUploadServices()
 
 class ElectionServices:
-    """Service layer for election lifecycle, whitelisting, and voting logic."""
+    """
+    Service layer containing the business logic for the Election System.
+    
+    Responsibilities:
+    - Managing Election lifecycle (Create, Update, Delete)
+    - Handling hierarchical data (Positions, Candidates)
+    - Managing Access Control (Whitelisting voters)
+    - Processing Votes securely
+    """
 
     async def get_user_by_email(self, user_email, session: AsyncSession, raise_Exception: bool = False):
-        """Finds a user by email to retrieve their UUID.
-        
+        """
+        Helper function to look up a User's UUID using their email address.
+
         Args:
-            user_email: The email string to search for.
-            session: The database session.
-            raise_Exception: If True, raises 404 on missing user.
-            
+            user_email (str): The email to search for.
+            session (AsyncSession): Database session.
+            raise_Exception (bool): If True, raises 404 immediately if user is missing.
+
         Returns:
-            A dict containing success status and user_id if found.
+            dict: A dictionary containing success status and user_id.
         """
         statement = select(User).where(User.email == user_email)
 
@@ -62,22 +71,17 @@ class ElectionServices:
                 "user_email": user_email
             }
         
-        user_id = user.user_id
         return {
             "success": True,
-            "user_id": user_id
+            "user_id": user.user_id
         }
     
     async def verify_creator(self, creator_id, election_id, session: AsyncSession):
-        """Authorizes a user as the creator of a specific election.
+        """
+        Security Check: Verifies that the current user is the Creator of the election.
         
-        Args:
-            creator_id: The UUID of the user to verify.
-            election_id: The UUID of the election.
-            session: The database session.
-            
-        Returns:
-            True if authorized, else raises HTTPException.
+        This implements Role-Based Access Control (RBAC) at the resource level.
+        Only the creator is allowed to modify the election, positions, or candidates.
         """
         statement = select(Election).where(Election.id == election_id)
 
@@ -96,7 +100,7 @@ class ElectionServices:
                 detail="election does not exist"
             )
         
-        # Verify ownership
+        # Strict string comparison to ensure IDs match exactly
         if str(election.creator_id) != str(creator_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -106,15 +110,11 @@ class ElectionServices:
         return True
 
     async def create_election(self, election_details: CreateElectionInput, creator_id: str, session: AsyncSession):
-        """Creates a new election and automatically whitelists the creator.
-        
-        Args:
-            election_details: Pydantic model with name and timeframes.
-            creator_id: UUID of the user creating the election.
-            session: The database session.
-            
-        Returns:
-            The created Election object.
+        """
+        Creates a new election.
+
+        Validations:
+        - Ensures Stop Time is strictly after Start Time.
         """
         if election_details.stop_time < election_details.start_time:
             raise HTTPException(
@@ -129,17 +129,15 @@ class ElectionServices:
             stop_time=election_details.stop_time
         )
         
-        
-
         try:
             session.add(new_election)
-            
             await session.commit() 
             await session.refresh(new_election)
             return new_election
         
         except IntegrityError as e:
             await session.rollback()
+            # Parse the specific database error to return a helpful message
             error_msg = str(e.orig)
             
             if "unique_Creator_election_name" in error_msg:
@@ -149,16 +147,23 @@ class ElectionServices:
 
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
         
-    async def update_election_details(self, update_election_details_input:UpdateElectionDetailsInput, creator_id: str, session: AsyncSession):
-        await self.verify_creator(creator_id,update_election_details_input.election_id, session)
+    async def update_election_details(self, update_election_details_input: UpdateElectionDetailsInput, creator_id: str, session: AsyncSession):
+        """
+        Updates election metadata with strict integrity locks.
 
+        Integrity Logic:
+        1. Prevents setting start/stop times in illogical order.
+        2. Prevents moving the election deadline to the past.
+        3. 'Time Lock': If the election has already started, the start_time becomes immutable 
+           to preserve the integrity of votes already cast.
+        """
+        await self.verify_creator(creator_id, update_election_details_input.election_id, session)
 
         statement = select(Election).where(Election.id == update_election_details_input.election_id)
 
         try:
             result = await session.exec(statement)
             election = result.first()
-
         except DatabaseError:
             await session.rollback()
             raise HTTPException(
@@ -167,17 +172,17 @@ class ElectionServices:
             )
         
         if not election:
-                
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Election not found"
             )
         
-    
+        # Use UTC for consistent time comparisons
         datetime_now = datetime.now(timezone.utc)
 
+        # Merge Logic: If input is None, use existing DB value.
+        # This allows valid comparison even if the user is only updating one field.
         new_start = update_election_details_input.start_time or election.start_time
-
         new_stop = update_election_details_input.stop_time or election.stop_time
 
         if new_start >= new_stop:
@@ -186,35 +191,37 @@ class ElectionServices:
                 detail="stopTime must be greater than startTime"
             )
 
-        
         if update_election_details_input.start_time and new_start < datetime_now:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail = "start_time must be in the future"
             )
         
+        # Prevent retroactive termination (ending an election in the past)
         if new_stop < datetime_now and new_stop != election.stop_time:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail = "stoptime must be greater than the current time"
             )
         
+        # INTEGRITY LOCK: If election is Active, block start_time changes.
         if election.start_time <= datetime_now:
-
             if update_election_details_input.start_time:
-
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Election has already started. You cannot change the start time."
                 )
 
-
-
+        # Dynamic Update Loop
+        # exclude_unset=True ensures we don't wipe existing data with Nulls
         for key, value in update_election_details_input.model_dump(exclude_unset=True).items():
             
+            # Sanitization: Skip explicit None values
             if value is None:
                 continue
             
+            # Sanitization: Skip empty strings. 
+            # We use isinstance check because .strip() on a datetime object causes a crash.
             if isinstance(value, str) and value.strip() == "":
                 continue
 
@@ -231,19 +238,17 @@ class ElectionServices:
                 detail="internal server error"
             )
 
-        
-        
-
-    
     async def delete_election(self, election_details: DeleteElectionInput, creator_id: str, session: AsyncSession):
-        """Permanently deletes an election and all cascading relationships.
-        
-        Args:
-            election_details: Input model containing the target election_id.
-            creator_id: UUID of the requestor for authorization.
-            session: The database session.
         """
-        await self.verify_creator(creator_id,election_details.election_id, session)
+        Permanently deletes an election.
+        
+        Due to database cascading, this also deletes:
+        - Positions
+        - Candidates
+        - Votes
+        - Whitelist entries
+        """
+        await self.verify_creator(creator_id, election_details.election_id, session)
         
         statement = select(Election).where(Election.id == election_details.election_id)
         try:
@@ -267,18 +272,12 @@ class ElectionServices:
             )
         
     async def create_position(self, creator_id, position_details: CreatePositionInput, session: AsyncSession):
-        """Adds a position to an existing election.
-        
-        Args:
-            creator_id: UUID of the admin.
-            position_details: Input model with position name and election ID.
-            session: The database session.
-        """
+        """Adds a voting position (e.g., 'President') to an election."""
         await self.verify_creator(creator_id, position_details.election_id, session)
 
         new_position = Position(
-            election_id =  position_details.election_id,
-            position_name= position_details.position_name
+            election_id=position_details.election_id,
+            position_name=position_details.position_name
         )
 
         try:
@@ -309,12 +308,7 @@ class ElectionServices:
             )
         
     async def delete_position(self, position_details: DeletePositionInput, creator_id: str, session: AsyncSession):
-        """Removes a position category from the election.
-        
-        Args:
-            position_details: Input model containing election and position IDs.
-            creator_id: UUID for authorization.
-        """
+        """Removes a position from the election."""
         await self.verify_creator(creator_id, position_details.election_id, session)
         
         statement = select(Position).where(Position.id == position_details.position_id)
@@ -338,85 +332,88 @@ class ElectionServices:
                 detail="internal server error"
             )
     
-    async def update_position_details(self, update_position_details_input:UpdatePositionDetailsInput, creator_id: str, session: AsyncSession):
-            await self.verify_creator(creator_id,update_position_details_input.election_id, session)
+    async def update_position_details(self, update_position_details_input: UpdatePositionDetailsInput, creator_id: str, session: AsyncSession):
+        """
+        Updates position details securely.
+        
+        Security:
+        - Verifies that the Position actually belongs to the Election (Prevents IDOR).
+        - Verifies that the Election has NOT started (Time Lock).
+        """
+        await self.verify_creator(creator_id, update_position_details_input.election_id, session)
 
-            statement = select(Position).where(Position.id == update_position_details_input.position_id).options(
-                selectinload(Position.election)
+        # Optimization: Eager load 'election' relationship to avoid extra query for start_time check
+        statement = select(Position).where(Position.id == update_position_details_input.position_id).options(
+            selectinload(Position.election)
+        )
+
+        try:
+            result = await session.exec(statement)
+            position = result.first()
+            
+            # Security Cross-Check: Ensure Position belongs to provided Election ID
+            if position.election_id != update_position_details_input.election_id:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="you are not authorized to edit this position"
+                )
+
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
+        
+        if not position:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="position not found"
+            )
+        
+        # Integrity Lock: Cannot edit structure of active election
+        datetime_now = datetime.now(timezone.utc)
+        if position.election.start_time <= datetime_now:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can't edit the position, the election has started"
             )
 
-            try:
-                result = await session.exec(statement)
-                position = result.first()
-                if position.election_id != update_position_details_input.election_id:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="you are not authorized to edit this position"
-                    )
+        # Prepare update data
+        input_data = update_position_details_input.model_dump(exclude_unset=True)
+        # Protect Primary/Foreign Keys from modification
+        input_data.pop("election_id", None)
+        input_data.pop("position_id", None)
 
-            except DatabaseError:
-                await session.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="internal server error"
-                )
+        for key, value in input_data.items():
+            # Sanitization Check
+            if value is None:
+                continue
             
-            if not position:
-                    
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="position not found"
-                )
-            
+            if isinstance(value, str) and value.strip() == "":
+                continue
 
-            
-        
-            datetime_now = datetime.now(timezone.utc)
+            setattr(position, key, value)
 
-            
-            
-            if position.election.start_time <= datetime_now:
-
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You can't edit the position, the election has started"
-                )
-
-            
-            input_data = update_position_details_input.model_dump(exclude_unset=True)
-            input_data.pop("election_id", None)
-            input_data.pop("position_id", None)
-
-            for key, value in input_data.items():
-                # SAFETY CHECK: Prevent setting name to null or empty string
-                if value is None:
-                    continue
-                
-                if isinstance(value, str) and value.strip() == "":
-                    continue
-
-                setattr(position, key, value)
-        
-
-
-            try:
-                await session.commit()
-                await session.refresh(position)
-                return position
-            except DatabaseError:
-                await session.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="internal server error"
-                )
+        try:
+            await session.commit()
+            await session.refresh(position)
+            return position
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
 
         
     async def create_candidates(self, creator_id, candidate_details: CreateCandidateInput, session: AsyncSession):
-        """Registers a candidate and ensures they are whitelisted as a voter.
+        """
+        Adds a candidate to the election.
         
-        Args:
-            creator_id: UUID of the election admin.
-            candidate_details: Model containing email and position ID.
+        Feature:
+        - Automatically checks if the candidate is in the 'AllowedVoter' table.
+        - If not, adds them to the whitelist (candidates can usually vote for themselves).
         """
         await self.verify_creator(creator_id, election_id=candidate_details.election_id, session=session)
 
@@ -433,7 +430,7 @@ class ElectionServices:
         try:
             session.add(new_candidate)
             
-            # Auto-whitelist candidate if not already present
+            # Auto-whitelist logic
             stmt = select(AllowedVoter).where(
                 AllowedVoter.user_id == user_id, 
                 AllowedVoter.election_id == candidate_details.election_id
@@ -462,83 +459,86 @@ class ElectionServices:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="internal server error"
             )
-    async def update_candidate_details(self, update_candidate_details_input:UpdateCandidateDetailsInput, creator_id: str, session: AsyncSession):
-            await self.verify_creator(creator_id,update_candidate_details_input.election_id, session)
+        
+    async def update_candidate_details(self, update_candidate_details_input: UpdateCandidateDetailsInput, creator_id: str, session: AsyncSession):
+        """
+        Updates candidate information securely.
+        
+        Complexity Note:
+        Since 'Candidate' is linked to 'Position', which is linked to 'Election',
+        we must chain loaders to access the Election's properties (like start_time).
+        """
+        await self.verify_creator(creator_id, update_candidate_details_input.election_id, session)
 
-            statement = select(Candidate).where(Candidate.id == update_candidate_details_input.candidate_id).options(
-                selectinload(Candidate.position).selectinload(Position.election)
+        # Chained Loading: Candidate -> Position -> Election
+        statement = select(Candidate).where(Candidate.id == update_candidate_details_input.candidate_id).options(
+            selectinload(Candidate.position).selectinload(Position.election)
+        )
+
+        try:
+            result = await session.exec(statement)
+            candidate = result.first()
+            
+            # Security: Ensure Candidate belongs to the provided Election context
+            if candidate.position.election_id != update_candidate_details_input.election_id:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="you are not authorized to edit this candidate"
+                )
+
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
+        
+        if not candidate:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="candidate not found"
+            )
+        
+        # Integrity Lock: No editing candidates once voting begins
+        datetime_now = datetime.now(timezone.utc)
+        if candidate.position.election.start_time <= datetime_now:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can't edit the candidate, the election has started"
             )
 
-            try:
-                result = await session.exec(statement)
-                candidate = result.first()
-                if candidate.position.election_id != update_candidate_details_input.election_id:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="you are not authorized to edit this candidate"
-                    )
+        # Update Loop with Sanitization
+        input_data = update_candidate_details_input.model_dump(exclude_unset=True)
+        input_data.pop("election_id", None)
+        input_data.pop("candidate_id", None)
 
-            except DatabaseError:
-                await session.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="internal server error"
-                )
+        for key, value in input_data.items():
+            if value is None:
+                continue
             
-            if not candidate:
-                    
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="candidate not found"
-                )
-            
+            if isinstance(value, str) and value.strip() == "":
+                continue
 
-            
-        
-            datetime_now = datetime.now(timezone.utc)
+            setattr(candidate, key, value)
 
-            
-            
-            if candidate.position.election.start_time <= datetime_now:
-
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You can't edit the candidate, the election has started"
-                )
-
-            
-            input_data = update_candidate_details_input.model_dump(exclude_unset=True)
-            input_data.pop("election_id", None)
-            input_data.pop("candidate_id", None)
-
-            for key, value in input_data.items():
-                # SAFETY CHECK: Prevent setting name to null or empty string
-                if value is None:
-                    continue
-                
-                if isinstance(value, str) and value.strip() == "":
-                    continue
-
-                setattr(candidate, key, value)
-        
-
-
-            try:
-                await session.commit()
-                await session.refresh(candidate)
-                return candidate
-            except DatabaseError:
-                await session.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="internal server error"
-                )
+        try:
+            await session.commit()
+            await session.refresh(candidate)
+            return candidate
+        except DatabaseError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="internal server error"
+            )
         
     async def delete_candidate(self, candidate_details: DeleteCandidateInput, creator_id: str, session: AsyncSession):
-        """Deletes a candidate and removes their associated whitelist record.
+        """
+        Deletes a candidate.
         
-        Args:
-            candidate_details: Input model with IDs for the candidate and election.
+        Cleanup:
+        Removes the candidate's specific whitelist entry for this election 
+        to keep the database clean.
         """
         await self.verify_creator(creator_id, candidate_details.election_id, session)
         
@@ -557,7 +557,7 @@ class ElectionServices:
         try:
             await session.delete(candidate)
 
-            # Cleanup whitelist entry for this specific election
+            # Cleanup whitelist
             voter_stmt = select(AllowedVoter).where(
                 AllowedVoter.user_id == candidate_user_id,
                 AllowedVoter.election_id == candidate_details.election_id
@@ -577,8 +577,13 @@ class ElectionServices:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
                 detail="Internal server error"
                 )
-    async def upload_candidate_picture(self, creator_id, election_id, candidate_id: uuid.UUID, file: UploadFile, session: AsyncSession):
 
+    async def upload_candidate_picture(self, creator_id, election_id, candidate_id: uuid.UUID, file: UploadFile, session: AsyncSession):
+        """
+        Updates a candidate's profile picture via Cloudinary.
+        
+        Uses `file_upload_service` to handle the external API call.
+        """
         await self.verify_creator(creator_id, election_id, session)
 
         candidate_statement = select(Candidate).where(Candidate.id == candidate_id)
@@ -591,6 +596,8 @@ class ElectionServices:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="candidate not found"
             )
+        
+        # Pass old ID to allow replacement/cleanup in Cloudinary
         old_candidate_picture_id = candidate.candidate_picture_id
         candidate_picture_id = await file_upload_service.upload_image(old_candidate_picture_id, file, type="candidate")
 
@@ -599,7 +606,6 @@ class ElectionServices:
         try:
             await session.commit()
             await session.refresh(candidate)
-
             return candidate
         except DatabaseError:
             await session.rollback()
@@ -609,19 +615,17 @@ class ElectionServices:
             )
         
     async def add_allowed_voters(self, creator_id, voters_details: AddAllowedVotersInput, session: AsyncSession):
-        """Whitelists a list of users for an election in bulk.
+        """
+        Bulk whitelist registration.
         
-        Args:
-            creator_id: UUID of the election admin.
-            voters_details: Model containing election ID and list of emails.
-            
-        Returns:
-            A report dict showing success, duplicate, and unregistered counts.
+        Logic:
+        1. Checks database for existing entries to prevent duplicates.
+        2. Filters out emails that don't exist in the Users table.
+        3. Returns a report of success/failure counts.
         """
         await self.verify_creator(creator_id, voters_details.election_id, session)
 
-        
-        # Pre-fetch existing voter IDs to prevent double entry
+        # Optimization: Fetch all existing whitelist entries once (Set lookup is O(1))
         statement = select(AllowedVoter.user_id).where(AllowedVoter.election_id == voters_details.election_id)
         result = await session.exec(statement)
         existing_voter_ids = set(result.all())
@@ -630,15 +634,15 @@ class ElectionServices:
         already_present_emails = [] 
         unregistered_emails = []
 
-
-
         try:
             for email in voters_details.emails:
+                # Reuse helper to find User ID by email
                 user_data = await self.get_user_by_email(email, session, raise_Exception=False)
                 
                 if user_data.get('success'):
                     u_id = user_data.get('user_id')
 
+                    # Prevent self-whitelist (optional business logic)
                     if str(u_id) == str(creator_id):
                         raise HTTPException(
                             status_code=status.HTTP_400_BAD_REQUEST,
@@ -651,6 +655,7 @@ class ElectionServices:
                 else:
                     unregistered_emails.append(email)
 
+            # Bulk Insert
             for u_id in voters_to_add_ids:
                 allowed_voter = AllowedVoter(
                     user_id=u_id,
@@ -672,12 +677,7 @@ class ElectionServices:
             )
 
     async def delete_allowed_voter(self, creator_id, voters_details: DeleteAllowedVoterInput, session: AsyncSession):
-        """Removes a specific user's voting rights for an election.
-        
-        Args:
-            creator_id: UUID of the admin.
-            voters_details: Model with user email and election ID.
-        """
+        """Revokes voting rights for a single user."""
         await self.verify_creator(creator_id, voters_details.election_id, session)
 
         user_data = await self.get_user_by_email(voters_details.email, session, raise_Exception=True)
@@ -704,20 +704,16 @@ class ElectionServices:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
         
     async def get_election_details(self, user_id, election_id, session: AsyncSession):
-        """Retrieves full election structure for authorized creators or whitelisted voters.
-        
-        Fetches the hierarchy of positions and candidates while enforcing access 
-        control. If the requestor is the admin, also returns the voter email list.
-
-        Args:
-            user_id: UUID of the user requesting details.
-            election_id: UUID of the election to retrieve.
-            session: The asynchronous database session.
-
-        Returns:
-            A dictionary containing serialized election data and participant info.
         """
-        # Initial check to verify election existence
+        Retrieves the full election hierarchy (Election -> Positions -> Candidates).
+        
+        Optimization:
+        Uses `selectinload` to eager-load all nested data in one query, preventing
+        performance bottlenecks.
+        
+        Security:
+        Blocks access if user is neither the Creator nor a Whitelisted Voter.
+        """
         statement = select(Election).where(Election.id == election_id)
 
         try:
@@ -735,7 +731,7 @@ class ElectionServices:
                 detail="election does not exist"
             )
         
-        # Security: Verify user is either whitelisted or the election creator
+        # Access Control: Check Whitelist
         allowed_statement = select(AllowedVoter).where(
             AllowedVoter.user_id == user_id,
             AllowedVoter.election_id == election_id
@@ -748,7 +744,7 @@ class ElectionServices:
                 detail="You are not whitelisted for this election"
             )
 
-        # Eager load Positions -> Candidates to avoid N+1 query overhead
+        # Deep Loading
         statement = (
             select(Election)
             .where(Election.id == election_id)
@@ -768,7 +764,7 @@ class ElectionServices:
                     detail="Election does not exist"
                 )
             
-            # Fetch full participant list only if the requestor is the admin
+            # Privacy: Only show full voter list to the Creator
             allowed_voters_list = None
             if str(election.creator_id) == str(user_id):
                 voters_statement = select(User.email).join(
@@ -779,7 +775,7 @@ class ElectionServices:
                 result = await session.exec(voters_statement)
                 allowed_voters_list = result.all()
                 
-            # Serialize the nested object structure into a response dictionary
+            # Manual Serialization
             election_data = {
                 "id": str(election.id),
                 "creator_id": str(election.creator_id),
@@ -816,12 +812,15 @@ class ElectionServices:
             )
         
 
-    async def vote(self, user_id:uuid.UUID, voter_input: VoteInput, session: AsyncSession):
-        """Records a vote after verifying timeframe, whitelist, and duplicate status.
+    async def vote(self, user_id: uuid.UUID, voter_input: VoteInput, session: AsyncSession):
+        """
+        Executes a Vote.
         
-        Args:
-            user_id: UUID of the voter.
-            voter_input: Input model containing election and candidate IDs.
+        Security Steps:
+        1. Validates Election Window (Is it active?).
+        2. Validates Whitelist (Can this user vote?).
+        3. Validates Candidate (Does the candidate match the position?).
+        4. Checks Duplicates (Did user already vote for this position?).
         """
         election_statement = select(Election).where(Election.id == voter_input.election_id)
         election_result = await session.exec(election_statement)
@@ -833,7 +832,7 @@ class ElectionServices:
                 detail="Election does not exist"
             )
 
-        # Validate election time window
+        # 1. Time Check
         now = datetime.now(timezone.utc)
         if election.start_time > now:
             raise HTTPException(
@@ -846,7 +845,7 @@ class ElectionServices:
                 detail="The election has ended"
             )
 
-        # Verify whitelisted status
+        # 2. Whitelist Check
         allowed_voter_statement = select(AllowedVoter).where(
             AllowedVoter.user_id == user_id,
             AllowedVoter.election_id == voter_input.election_id
@@ -859,7 +858,7 @@ class ElectionServices:
                 detail="You are not authorized to vote in this election"
             )
 
-        # Ensure candidate is actually part of this specific election
+        # 3. Integrity Check (Candidate <-> Position Link)
         candidate_stmt = (
             select(Candidate)
             .join(Position)
@@ -877,11 +876,10 @@ class ElectionServices:
                 detail="Invalid candidate selection for this election"
             )
         
-        # INTEGRITY CHECK: Ensure candidate actually belongs to the position the user claims to vote for
         if candidate_voted.position_id != voter_input.position_id:
              raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Candidate is not running for this position")
 
-        # Perform atomic update on vote count and record audit trail
+        # 4 & 5. Atomic Update
         candidate_voted.vote_count = Candidate.vote_count + 1
         new_vote = Vote(
             user_id=user_id,
@@ -898,6 +896,7 @@ class ElectionServices:
         except IntegrityError as e:
             await session.rollback()
             error_msg = str(e.orig)
+            # Detect duplicate key violation for (user_id, position_id)
             if "duplicate_vote" in error_msg:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -916,15 +915,15 @@ class ElectionServices:
             )
 
     async def get_election_result(self, creator_id, election_id, session: AsyncSession):
-        """Calculates election leaderboard sorted by vote counts.
+        """
+        Generates the Election Leaderboard.
         
-        Args:
-            creator_id: Admin UUID for authorization.
-            election_id: UUID of the election.
+        Returns:
+        A structure containing positions, each with a list of candidates sorted by
+        vote count (Descending).
         """
         await self.verify_creator(creator_id, election_id, session)
 
-        # Load nested objects via optimized eager loading
         election_statement = (
             select(Election)
             .where(Election.id == election_id)
@@ -944,9 +943,9 @@ class ElectionServices:
                     detail="Election not found"
                 )
 
-            # Build leaderboard by sorting candidates per position
             leaderboard = []
             for pos in election.positions:
+                # Sort candidates in Python (Descending order of votes)
                 sorted_candidates = sorted(
                     pos.candidates, 
                     key=lambda c: c.vote_count, 
@@ -969,20 +968,13 @@ class ElectionServices:
             )
         
     async def get_my_ballot(self, user_id, session: AsyncSession):
-        """Retrieves eligible ballots for a user, including created and whitelisted elections.
-        
-        This method fetches all elections relevant to a user in a single pass using 
-        optimized eager loading. It merges created and whitelisted elections, 
-        deduplicates them, and calculates the voting status and lifecycle phase.
-
-        Args:
-            user_id: The UUID of the user requesting their dashboard.
-            session: The asynchronous database session.
-
-        Returns:
-            A list of dictionaries representing the user's election dashboard data.
         """
-        # Fetch user with nested relationships for whitelists, ownership, and vote history
+        Aggregates all elections a user is involved in (Created or Whitelisted).
+        
+        Calculates:
+        - Election Status (Upcoming, Active, Ended)
+        - Vote Status (Has the user participated?)
+        """
         user_statement = select(User).where(
             User.user_id == user_id
         ).options(
@@ -1006,23 +998,22 @@ class ElectionServices:
                 detail="user not found"
             )
         
-        # Merge created and whitelisted elections; deduplicate via ID-keyed dictionary
+        # Combine lists and remove duplicates using dictionary comprehension
         elections_combined = (user.allowed_elections + user.election_created)
         relevant_elections = {e.id: e for e in elections_combined}
         
-        # Convert voted positions into a set for O(1) membership testing
+        # Optimize lookup: Create a set of positions the user has already voted for
         position_voted_id = {p.id for p in user.position_voted}
 
         ballot_list = []
         now = datetime.now(timezone.utc)
 
-        # Process each unique election object
         for election in relevant_elections.values():
-            # Check if user has participated in any position within this election
+            # Status: Has user cast at least one vote here?
             has_voted = any(p.id in position_voted_id for p in election.positions)
             vote_status = "voted" if has_voted else "not voted"
 
-            # Dynamic lifecycle status calculation
+            # Status: Election Lifecycle
             election_status = "upcoming"
             if election.stop_time > now and now > election.start_time:
                 election_status = "active"
@@ -1030,7 +1021,6 @@ class ElectionServices:
             if election.stop_time < now:
                 election_status = "ended"
 
-            # Prepare serialized ballot data
             ballot = {
                 "election_id": election.id,
                 "election_name": election.election_name,
