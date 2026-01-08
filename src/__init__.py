@@ -8,11 +8,11 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from src.db.main import db_cleanup
+from src.db.main import DbCleanup
 
 
 scheduler = AsyncIOScheduler()
-
+db_cleanup = DbCleanup()
 
 
 @asynccontextmanager
@@ -24,8 +24,9 @@ async def lifespan(app: FastAPI):
     
     # 2. Check Redis Connection
     await check_redis_connection()
-    scheduler.add_job(db_cleanup, 'interval', minutes=5)
-
+    scheduler.add_job(db_cleanup.users_cleanup, 'interval', minutes=5)
+    scheduler.add_job(db_cleanup.signup_otp_cleanup, 'interval', minutes=5)
+    
     scheduler.start()
     yield
     

@@ -12,9 +12,9 @@ from src.config import Config
 from sqlmodel import SQLModel
 from sqlalchemy.orm import sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
-from src.auth.models import User
+from src.auth.models import User, SignupOtp
 from sqlmodel import select
-from sqlalchemy.exc import DatabaseError
+from datetime import datetime, timezone
 
 
 
@@ -51,21 +51,39 @@ async def get_Session():
     async with async_session_maker() as session:
         yield session
 
-async def db_cleanup():
-    async with async_session_maker() as session:
-    
-            
-        try:
-            statement = select(User).where(User.email_verified == False)
-            result = await session.exec(statement)
-            unverified_users = result.all()
-
-            for user in unverified_users:
-                await session.delete(user)
-            await session.commit()
-            print("daily cleanup done")
+class DbCleanup:
+    async def users_cleanup(self):
+        async with async_session_maker() as session:
         
-        except Exception as e:
-            await session.rollback()
-            print(f" Cleanup Failed: {e}")
+            try:
+                statement = select(User).where(User.email_verified == False)
+                result = await session.exec(statement)
+                unverified_users = result.all()
+
+                for user in unverified_users:
+                    await session.delete(user)
+                await session.commit()
+                print("daily cleanup done")
+            
+            except Exception as e:
+                await session.rollback()
+                print(f" Cleanup Failed: {e}")
+            
+    async def signup_otp_cleanup(self):
+        datetime_now = datetime.now(timezone.utc)
+        async with async_session_maker() as session:
+        
+            try:
+                statement = select(SignupOtp).where(SignupOtp.expires <= datetime_now)
+                result = await session.exec(statement)
+                expired_signup_otp= result.all()
+
+                for otp in expired_signup_otp:
+                    await session.delete(otp)
+                await session.commit()
+                print("daily signup otp cleanup done")
+            
+            except Exception as e:
+                await session.rollback()
+                print(f" Cleanup Failed: {e}")
         
