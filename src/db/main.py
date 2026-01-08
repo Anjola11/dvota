@@ -61,7 +61,7 @@ async def db_cleanup():
             unverified_users = result.all()
 
             for user in unverified_users:
-                session.delete(user)
+                await session.delete(user)
             await session.commit()
             print("daily cleanup done")
         
