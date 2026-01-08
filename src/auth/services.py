@@ -82,10 +82,6 @@ class AuthServices:
 
             )
     
-        
-
-    
-
 
     async def verify_otp(self, otp_input:VerifyOtpInput, session: AsyncSession):
         """Verify a user's OTP and activate their account.

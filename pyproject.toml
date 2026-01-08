@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.17.2",
+    "apscheduler>=3.11.2",
     "asyncpg>=0.31.0",
     "bcrypt>=5.0.0",
     "brevo-python>=1.2.0",

@@ -12,6 +12,10 @@ from src.config import Config
 from sqlmodel import SQLModel
 from sqlalchemy.orm import sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
+from src.auth.models import User
+from sqlmodel import select
+from sqlalchemy.exc import DatabaseError
+
 
 
 
@@ -46,3 +50,22 @@ async def get_Session():
     
     async with async_session_maker() as session:
         yield session
+
+async def db_cleanup():
+    async with async_session_maker() as session:
+    
+            
+        try:
+            statement = select(User).where(User.email_verified == False)
+            result = await session.exec(statement)
+            unverified_users = result.all()
+
+            for user in unverified_users:
+                session.delete(user)
+            await session.commit()
+            print("daily cleanup done")
+        
+        except Exception as e:
+            await session.rollback()
+            print(f" Cleanup Failed: {e}")
+        
