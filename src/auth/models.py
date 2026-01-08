@@ -81,7 +81,10 @@ class User(SQLModel, table=True):
     # MANY-TO-MANY
     candidate_voted: List["Candidate"] = Relationship(
         back_populates="voters",
-        sa_relationship_kwargs={"cascade": "save-update, merge"},
+        sa_relationship_kwargs={
+            "cascade": "save-update, merge",
+            "overlaps": "position_voted,voters"
+            },
         link_model=Vote
     )
     

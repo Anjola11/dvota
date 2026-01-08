@@ -24,8 +24,8 @@ async def lifespan(app: FastAPI):
     
     # 2. Check Redis Connection
     await check_redis_connection()
-    scheduler.add_job(db_cleanup.users_cleanup, 'interval', minutes=5)
-    scheduler.add_job(db_cleanup.signup_otp_cleanup, 'interval', minutes=5)
+    scheduler.add_job(db_cleanup.users_cleanup, 'interval', days=1)
+    scheduler.add_job(db_cleanup.universal_otp_cleanup, 'interval', minutes=30)
     
     scheduler.start()
     yield

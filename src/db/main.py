@@ -12,9 +12,9 @@ from src.config import Config
 from sqlmodel import SQLModel
 from sqlalchemy.orm import sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
-from src.auth.models import User, SignupOtp
+from src.auth.models import User, SignupOtp, ForgotPasswordOtp
 from sqlmodel import select
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 
@@ -51,12 +51,14 @@ async def get_Session():
     async with async_session_maker() as session:
         yield session
 
+unregisted_user_limit = timedelta(days=1)
 class DbCleanup:
+    datetime_now = datetime.now(timezone.utc)
     async def users_cleanup(self):
         async with async_session_maker() as session:
         
             try:
-                statement = select(User).where(User.email_verified == False)
+                statement = select(User).where(User.email_verified == False, User.created_at + unregisted_user_limit < self.datetime_now)
                 result = await session.exec(statement)
                 unverified_users = result.all()
 
@@ -69,21 +71,25 @@ class DbCleanup:
                 await session.rollback()
                 print(f" Cleanup Failed: {e}")
             
-    async def signup_otp_cleanup(self):
-        datetime_now = datetime.now(timezone.utc)
-        async with async_session_maker() as session:
-        
-            try:
-                statement = select(SignupOtp).where(SignupOtp.expires <= datetime_now)
-                result = await session.exec(statement)
-                expired_signup_otp= result.all()
+    async def universal_otp_cleanup(self):
 
-                for otp in expired_signup_otp:
-                    await session.delete(otp)
-                await session.commit()
-                print("daily signup otp cleanup done")
-            
-            except Exception as e:
-                await session.rollback()
-                print(f" Cleanup Failed: {e}")
+        
+
+        models = [SignupOtp, ForgotPasswordOtp]
+        async with async_session_maker() as session:
+
+            for model in models:
+                try:
+                    statement = select(model).where(model.expires <= self.datetime_now)
+                    result = await session.exec(statement)
+                    expired_signup_otp= result.all()
+
+                    for otp in expired_signup_otp:
+                        await session.delete(otp)
+                    await session.commit()
+                    print(f"daily {getattr(model, '__tablename__', 'user').lower()} cleanup done")
+                
+                except Exception as e:
+                    await session.rollback()
+                    print(f" Cleanup Failed: {e}")
         
