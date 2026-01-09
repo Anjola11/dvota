@@ -28,6 +28,16 @@ class VerifyOtpInput(BaseModel):
     otp: str
     otp_type: OtpTypes
 
+class ResendOtpInput(BaseModel):
+    """Payload for resending email/password OTPs."""
+    email: uuid.UUID
+    otp_type: OtpTypes
+
+class ResendOtpResponse(BaseModel):
+    success: bool
+    message: str
+    user_id: uuid.UUID
+
 class ForgotPasswordInput(BaseModel):
     """Payload for initiating password reset."""
     email: EmailStr

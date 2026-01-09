@@ -73,8 +73,6 @@ class DbCleanup:
             
     async def universal_otp_cleanup(self):
 
-        
-
         models = [SignupOtp, ForgotPasswordOtp]
         async with async_session_maker() as session:
 

@@ -9,6 +9,8 @@ from src.auth.schemas import (
     UserInput, 
     UserCreateResponse, 
     VerifyOtpInput, 
+    ResendOtpInput,
+    ResendOtpResponse,
     LoginInput, 
     LoginResponse, 
     ForgotPasswordInput, 
@@ -49,7 +51,7 @@ async def signupUser(
     user_id = new_user.user_id
     
     
-    otp_record = await emailServices.save_otp(user_id, session, type="signup")
+    otp_record = await emailServices.save_otp(user_id, session, type=OtpTypes.SIGNUP)
     
     # 3. Send verification email in background
     background_tasks.add_task(
@@ -106,6 +108,13 @@ async def verifyOtp(
             "message": "OTP verified successfully",
             "data": result
         }
+    
+@authRouter.post("/resend-otp",response_model=ResendOtpResponse, status_code=status.HTTP_200_OK)
+async def resendOtp(resend_otp_input: ResendOtpInput,background_tasks: BackgroundTasks,  
+    session: AsyncSession = Depends(get_Session)):
+    otp = await authServices.resend_otp(resend_otp_input,session, background_tasks)
+
+    return otp
 
 @authRouter.post("/login", status_code=status.HTTP_200_OK, response_model=LoginResponse)
 async def loginUser(
@@ -131,7 +140,7 @@ async def forgotPassword(
     user_id = user.user_id
     
     # 2. Generate and save OTP
-    otp_record = await emailServices.save_otp(user_id, session, type="forgotPassword")
+    otp_record = await emailServices.save_otp(user_id, session, type=OtpTypes.FORGOTPASSWORD)
     
     # 3. Send email in background
     background_tasks.add_task(
