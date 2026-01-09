@@ -30,7 +30,7 @@ class VerifyOtpInput(BaseModel):
 
 class ResendOtpInput(BaseModel):
     """Payload for resending email/password OTPs."""
-    email: uuid.UUID
+    email: EmailStr
     otp_type: OtpTypes
 
 class ResendOtpResponse(BaseModel):
