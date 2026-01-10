@@ -28,6 +28,7 @@ from src.utils.auth import create_token
 from datetime import timedelta
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from src.utils.auth import get_current_user
+from src.utils.limiter import limiter
 
 
 reset_password_expiry = timedelta(minutes=5)
@@ -41,6 +42,7 @@ emailServices = EmailServices()
 security = HTTPBearer()
 
 @authRouter.post("/signup", status_code=status.HTTP_201_CREATED, response_model=UserCreateResponse)
+@limiter.limit("5/minute")
 async def signupUser(
     userInput: UserInput, 
     background_tasks: BackgroundTasks, 
@@ -68,6 +70,7 @@ async def signupUser(
     }
 
 @authRouter.post("/verify_otp", status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 async def verifyOtp(
     otp_input: VerifyOtpInput, 
     background_tasks: BackgroundTasks, 
@@ -110,6 +113,7 @@ async def verifyOtp(
         }
     
 @authRouter.post("/resend-otp",response_model=ResendOtpResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 async def resendOtp(resend_otp_input: ResendOtpInput,background_tasks: BackgroundTasks,  
     session: AsyncSession = Depends(get_Session)):
     otp = await authServices.resend_otp(resend_otp_input,session, background_tasks)
@@ -117,6 +121,7 @@ async def resendOtp(resend_otp_input: ResendOtpInput,background_tasks: Backgroun
     return otp
 
 @authRouter.post("/login", status_code=status.HTTP_200_OK, response_model=LoginResponse)
+@limiter.limit("5/minute")
 async def loginUser(
     loginInput: LoginInput, 
     session: AsyncSession = Depends(get_Session)
@@ -130,6 +135,7 @@ async def loginUser(
     }
 
 @authRouter.post("/forgot_password", status_code=status.HTTP_201_CREATED, response_model=ForgotPasswordResponse)
+@limiter.limit("5/minute")
 async def forgotPassword(
     forgotPasswordInput: ForgotPasswordInput, 
     background_tasks: BackgroundTasks, 
@@ -157,6 +163,7 @@ async def forgotPassword(
     }
 
 @authRouter.patch("/reset_password", status_code=status.HTTP_200_OK, response_model=UserCreateResponse)
+@limiter.limit("5/minute")
 async def resetPassword( 
     resetPasswordInput: ResetPasswordInput, 
     session: AsyncSession = Depends(get_Session)
@@ -171,6 +178,7 @@ async def resetPassword(
     }
 
 @authRouter.post("/upload-profile-picture/", status_code=status.HTTP_201_CREATED, response_model=UserCreateResponse)
+@limiter.limit("5/minute")
 async def upload_profile_picture(
     user_id=Depends(get_current_user), 
     session: AsyncSession = Depends(get_Session),
@@ -185,6 +193,7 @@ async def upload_profile_picture(
     }
 
 @authRouter.post("/renew_access_token", status_code=status.HTTP_201_CREATED, response_model=RenewAccessTokenResponse)
+@limiter.limit("5/minute")
 async def renewAccessToken(
     renewAccessTokenInput: RenewAccessTokenInput,
     session: AsyncSession = Depends(get_Session) 

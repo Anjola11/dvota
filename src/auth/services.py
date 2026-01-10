@@ -370,17 +370,24 @@ class AuthServices:
         
     async def renewAccessToken(self, renewAccessTokenInput: RenewAccessTokenInput, session: AsyncSession):
        
-        refresh_token_str = renewAccessTokenInput.refresh_token
+        old_refresh_token_str = renewAccessTokenInput.refresh_token
         
-        token_decode = decode_token(refresh_token_str)
+        old_refresh_token_decode = decode_token(old_refresh_token_str)
 
-        if token_decode.get('type') != "refresh":
+        if old_refresh_token_decode.get('type') != "refresh":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
                 detail="Invalid token type"
             )
+        
+        jti = old_refresh_token_decode.get('jti')
+        if await self.is_token_blacklisted(jti):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Refresh token reused. Login required."
+            )
 
-        user_id = token_decode.get("sub") 
+        user_id = old_refresh_token_decode.get("sub") 
         statement = select(User).where(User.user_id == uuid.UUID(user_id))
         result = await session.exec(statement)
         user = result.first()
@@ -394,9 +401,14 @@ class AuthServices:
         }
 
         new_token = create_token(user_data, expiry_delta=access_token_expiry, type="access")
+
+        await self.add_token_to_blocklist(old_refresh_token_str)
+
+        new_refresh_token = create_token(user_data, expiry_delta=refresh_token_expiry, type="refresh")
         
         return {
-            "access_token" : new_token
+            "access_token" : new_token,
+            "refresh_token": new_refresh_token
         }
     
     async def add_token_to_blocklist(self, token):

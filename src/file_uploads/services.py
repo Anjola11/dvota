@@ -3,8 +3,9 @@ from fastapi import UploadFile, HTTPException, status
 import cloudinary
 from cloudinary.uploader import upload, destroy
 import asyncio
+import magic
 
-max_upload_bytes = 5 * 1024 * 1024
+max_upload_bytes = 2 * 1024 * 1024
 
 cloudinary.config(
     cloud_name=Config.CLOUDINARY_CLOUD_NAME,
@@ -17,9 +18,17 @@ class FileUploadServices:
     #allows only images pass
     def validate_file(self, file: UploadFile):
 
+        header_data = file.file.read(2048)
+
+        file.file.seek(0)
+
+        mime_detector = magic.Magic(mime=True)
+
+        real_content_type = mime_detector.from_buffer(header_data)
+
         allowed_types = ["image/jpeg","image/jpg","image/png","image/webp"]
 
-        if file.content_type not in allowed_types:
+        if real_content_type not in allowed_types:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="invalid file type, only Jpeg,png,webp,jpg allowed"

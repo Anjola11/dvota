@@ -9,6 +9,10 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from src.db.main import DbCleanup
+from slowapi import  _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from src.utils.limiter import limiter
 
 
 scheduler = AsyncIOScheduler()
@@ -40,6 +44,10 @@ app = FastAPI(
     description="Endpoints for Dvota",
     lifespan = lifespan
 )
+
+app.state.limiter = limiter
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 from fastapi.middleware.cors import CORSMiddleware
 
