@@ -32,8 +32,9 @@ electionRouter = APIRouter()
 electionServices = ElectionServices()
 
 @electionRouter.post("/create-election", response_model=CreateElectionResponse, status_code=status.HTTP_201_CREATED)
-async def create_election(election_details: CreateElectionInput, session: AsyncSession = Depends(get_Session),
-creator_id: str = Depends(get_current_user), ):
+async def create_election(
+    election_details: CreateElectionInput, session: AsyncSession = Depends(get_Session),
+    creator_id: str = Depends(get_current_user), ):
 
     election = await electionServices.create_election(election_details, creator_id, session)
 

@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
 import uuid
 from src.emailServices.schemas import OtpTypes
+from typing import Optional
 
 # --- INPUT SCHEMAS ---
 
@@ -70,9 +71,8 @@ class LoginData(BaseModel):
     email_verified: bool
     profile_picture_url: str
     created_at: datetime
-    access_token: str
-    refresh_token: str
-
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class LoginResponse(BaseModel):
@@ -99,6 +99,8 @@ class RenewAccessTokenResponse(BaseModel):
     message: str
     data: dict = {}
 
+class LogoutInput(BaseModel):
+    refresh_token: Optional[str] = None
 class LogoutResponse(BaseModel):
     success: bool
     message: str

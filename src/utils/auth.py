@@ -16,10 +16,13 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import uuid
 from src.config import Config
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from src.db.redis import redis_client
 
+
+
+security = HTTPBearer(auto_error=False)
 
 
 
@@ -119,27 +122,58 @@ def decode_token(token: str) -> dict:
     return token_data
 
 
-security = HTTPBearer()
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(request: Request, bearer_token: HTTPAuthorizationCredentials = Depends(security)):
+    """Extract and validate user from dual authentication sources.
+    
+    Implements dual authentication supporting both mobile (HTTPBearer) and web (cookies).
+    Priority: Bearer token first, fallback to cookies for maximum flexibility.
+    
+    Args:
+        request: FastAPI request object to access cookies.
+        bearer_token: Optional HTTPBearer credentials from Authorization header.
+    
+    Returns:
+        str: User ID extracted from the validated access token.
+    
+    Raises:
+        HTTPException: If no credentials provided, token invalid/expired/revoked,
+                      or token type mismatch.
+    """
+    token = None
 
-    token = credentials.credentials
+    # Dual-auth: Check bearer token first (mobile), then cookies (web)
+    if bearer_token and bearer_token.credentials:
+        token = bearer_token.credentials  # Mobile: Authorization: Bearer <token>
+    if not token:
+        token = request.cookies.get("access_token")  # Web: httponly cookie
 
+    if token == None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication credentials not provided"
+        )
+    
+    # Decode and validate token signature and expiry
     token_decoded = decode_token(token)
+    
     jti = token_decoded.get('jti')
     
+    # Check if token has been revoked (logout/token rotation)
     if jti and await redis_client.get(jti):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has been revoked (User logged out)"
         )
    
+    # Ensure this is an access token, not refresh/reset token
     if token_decoded.get('type') != 'access':
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token type. Access token required."
         )
 
+    # Extract user identity from token subject
     user_id = token_decoded.get("sub")
     if not user_id:
         raise HTTPException(
