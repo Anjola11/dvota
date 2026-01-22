@@ -45,6 +45,7 @@ security = HTTPBearer(auto_error=False)
 @authRouter.post("/signup", status_code=status.HTTP_201_CREATED, response_model=UserCreateResponse)
 @limiter.limit("5/minute")
 async def signupUser(
+    request: Request, 
     userInput: UserInput, 
     background_tasks: BackgroundTasks, 
    
@@ -75,6 +76,7 @@ async def signupUser(
 @authRouter.post("/verify_otp", status_code=status.HTTP_200_OK)
 @limiter.limit("5/minute")
 async def verifyOtp(
+    request: Request, 
     otp_input: VerifyOtpInput, 
     background_tasks: BackgroundTasks, 
     session: AsyncSession = Depends(get_Session)
@@ -117,7 +119,8 @@ async def verifyOtp(
     
 @authRouter.post("/resend-otp",response_model=ResendOtpResponse, status_code=status.HTTP_200_OK)
 @limiter.limit("5/minute")
-async def resendOtp(resend_otp_input: ResendOtpInput,background_tasks: BackgroundTasks,  
+async def resendOtp(request: Request,
+    resend_otp_input: ResendOtpInput,background_tasks: BackgroundTasks,  
     session: AsyncSession = Depends(get_Session)):
     otp = await authServices.resend_otp(resend_otp_input,session, background_tasks)
 
@@ -176,6 +179,7 @@ async def loginUser(
 @authRouter.post("/forgot_password", status_code=status.HTTP_201_CREATED, response_model=ForgotPasswordResponse)
 @limiter.limit("5/minute")
 async def forgotPassword(
+    request: Request, 
     forgotPasswordInput: ForgotPasswordInput, 
     background_tasks: BackgroundTasks, 
     session: AsyncSession = Depends(get_Session)
@@ -204,6 +208,7 @@ async def forgotPassword(
 @authRouter.patch("/reset_password", status_code=status.HTTP_200_OK, response_model=UserCreateResponse)
 @limiter.limit("5/minute")
 async def resetPassword( 
+    request: Request, 
     resetPasswordInput: ResetPasswordInput, 
     session: AsyncSession = Depends(get_Session)
 ):
