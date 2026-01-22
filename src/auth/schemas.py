@@ -4,11 +4,12 @@ This module defines the request and response models used in authentication
 endpoints. Validates data for the simplified, single-user-table architecture.
 """
 
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 from datetime import datetime
 import uuid
 from src.emailServices.schemas import OtpTypes
 from typing import Optional
+import re
 
 # --- INPUT SCHEMAS ---
 
@@ -16,7 +17,21 @@ class UserInput(BaseModel):
     """Payload for user registration."""
     fullName: str
     email: EmailStr
-    password: str
+    password: str 
+
+    @field_validator("password")
+    @classmethod
+    def validate(cls, value:str):
+        if len(value) < 8:
+            raise ValueError("Password must have a minimum length of 8 characters")
+        
+        if not re.search(r'[A-Z]', value):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', value):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'[0-9]', value):
+            raise ValueError('Password must contain at least one digit')
+        return v
 
 class LoginInput(BaseModel):
     """Payload for user login."""
