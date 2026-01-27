@@ -285,7 +285,7 @@ async def renewAccessToken(
     token = None
 
     # Dual-auth: Extract refresh token from bearer header or cookies
-    bearer_raw = bearer_token.credentials
+    bearer_raw = bearer_token.credentials if bearer_token else None
     cookie_raw = request.cookies.get('refresh_token')
 
     # Priority: Bearer token first, fallback to cookies
@@ -325,12 +325,12 @@ async def renewAccessToken(
             "data": {}  # Empty body for web clients
         }
     
-    # Mobile client (bearer-based): Return tokens in response body
-    if bearer_raw and not cookie_raw:
-        return {
-            "success": True,
-            "message": "access token renewed successfully",
-            "data": new_token  # Contains access_token & refresh_token
-        }
+    # Mobile client (bearer-based) or hybrid where bearer is provided: 
+    # Return tokens in response body
+    return {
+        "success": True,
+        "message": "access token renewed successfully",
+        "data": new_token  # Contains access_token & refresh_token
+    }
 
 
