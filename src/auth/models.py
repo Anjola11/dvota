@@ -101,7 +101,9 @@ class SignupOtp(SQLModel, table=True):
     
     otp_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     otp: str
-    user_id: uuid.UUID
+    user_id: uuid.UUID = Field(foreign_key="users.user_id")
+    max_attempts: int = Field(default=3)
+    attempts:  int = Field(default=0)
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(pg.TIMESTAMP(timezone=True)))
@@ -126,7 +128,9 @@ class ForgotPasswordOtp(SQLModel, table=True):
     
     otp_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     otp: str
-    user_id: uuid.UUID
+    user_id: uuid.UUID = Field(foreign_key="users.user_id")
+    max_attempts: int = Field(default=3)
+    attempts:  int = Field(default=0)
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(pg.TIMESTAMP(timezone=True)))

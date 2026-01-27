@@ -158,7 +158,7 @@ async def loginUser(
         httponly=True,  # Prevents JavaScript access (XSS protection)
         secure=True,  # HTTPS only
         samesite="Lax",  # CSRF protection
-        max_age = 60 * 60 * 24 * 7  # 7 days
+        max_age = 60 * 60 * 2  # 2 hours
     )
     response.set_cookie(
         key="refresh_token",
@@ -166,7 +166,7 @@ async def loginUser(
         httponly=True,
         secure=True,
         samesite="Lax",
-        max_age = 60 * 60 * 24 * 7
+        max_age = 60 * 60 * 24 * 3 #3 days
     )
    
     # Return tokens in body for mobile clients (cookies ignored by mobile HTTP clients)
@@ -307,14 +307,16 @@ async def renewAccessToken(
             value=new_token.get('access_token'),
             httponly=True,
             secure=True,
-            samesite="Lax"
+            samesite="Lax",
+            max_age=60 * 60 * 2  # 2 hours (matches token expiry)
         )
         response.set_cookie(
             key="refresh_token",
             value=new_token.get('refresh_token'),
             httponly=True,
             secure=True,
-            samesite="Lax"
+            samesite="Lax",
+            max_age=60 * 60 * 24 * 3  # 3 days (matches token expiry)
         )
         # Return empty data; tokens delivered via cookies
         return {
@@ -332,62 +334,3 @@ async def renewAccessToken(
         }
 
 
-@authRouter.post("/logout", status_code=status.HTTP_200_OK, response_model=LogoutResponse)
-async def logout(
-    request: Request,
-    response: Response,
-    logout_input: LogoutInput,
-    bearer_token: HTTPAuthorizationCredentials = Depends(security),
-):
-    """Logout user by revoking tokens with dual-auth support.
-    
-    Handles token revocation for both web and mobile clients:
-    - Mobile: Reads tokens from Authorization header and request body
-    - Web: Reads tokens from cookies
-    Both tokens are added to Redis blocklist for immediate revocation.
-    
-    Args:
-        request: Request object to access cookies.
-        response: Response object to delete cookies.
-        logout_input: Optional refresh token from request body (for mobile).
-        bearer_token: Optional access token from Authorization header (for mobile).
-    
-    Returns:
-        LogoutResponse confirming successful logout.
-    
-    Raises:
-        HTTPException: If no tokens found in either source.
-    """
-    
-    # Dual-auth: Extract tokens from bearer/body (mobile) or cookies (web)
-    if bearer_token:
-        # Mobile client: Access token in header, refresh token in body
-        access_token = bearer_token.credentials
-        refresh_token = logout_input.refresh_token
-    
-    else:
-        # Web client: Both tokens in cookies
-        access_token = request.cookies.get("access_token")
-        refresh_token = request.cookies.get("refresh_token")
-
-    if access_token == None and refresh_token == None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token missing"
-        )
-
-    # Revoke tokens by adding to Redis blocklist (prevents reuse)
-    if access_token:
-        await authServices.add_token_to_blocklist(access_token)
-    if refresh_token:
-        await authServices.add_token_to_blocklist(refresh_token)
-
-    # Delete cookies (harmless for mobile, necessary for web)
-    response.delete_cookie(key="access_token")
-    response.delete_cookie(key="refresh_token")
-    
-    return {
-        "success": True,
-        "message": "Logged out successfully",
-        "data": {}
-    }

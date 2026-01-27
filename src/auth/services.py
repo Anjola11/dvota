@@ -10,11 +10,12 @@ from sqlmodel import select
 from src.auth.models import User, SignupOtp, ForgotPasswordOtp
 from src.auth.schemas import (
     UserInput, VerifyOtpInput, LoginInput, ForgotPasswordInput, 
-    ResetPasswordInput, RenewAccessTokenInput, ResendOtpInput
+    ResetPasswordInput, RenewAccessTokenInput, ResendOtpInput, LogoutInput
 )
 from src.emailServices.schemas import OtpTypes
 from sqlmodel.ext.asyncio.session import AsyncSession
-from fastapi import HTTPException, status, UploadFile, BackgroundTasks
+from fastapi import HTTPException, status, UploadFile, BackgroundTasks, Request, Response
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.exc import DatabaseError
 from src.utils.auth import generate_password_hash, verify_password_hash, create_token, decode_token
 from datetime import datetime, timezone, timedelta
@@ -116,9 +117,19 @@ class AuthServices:
         
         # Validate OTP code matches
         if latest_otp_record.otp != otp_input.otp:
+            latest_otp_record.attempts += 1
+            if latest_otp_record.attempts >= latest_otp_record.max_attempts:  
+                await session.delete(latest_otp_record)
+                await session.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, 
+                    detail="OTP expired due to too many failed attempts"
+                )
+            
+            await session.commit()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
-                detail="Invalid OTP code"
+                detail=f"Invalid OTP. {latest_otp_record.max_attempts - latest_otp_record.attempts} attempts remaining"
             )
 
         # Check if OTP has expired
@@ -479,3 +490,63 @@ class AuthServices:
         """
         result = await redis_client.get(jti)
         return result is not None
+    
+    async def logout(
+            self,
+    request: Request,
+    response: Response,
+    logout_input: LogoutInput,
+    bearer_token: HTTPAuthorizationCredentials,
+):
+        """Logout user by revoking tokens with dual-auth support.
+        
+        Handles token revocation for both web and mobile clients:
+        - Mobile: Reads tokens from Authorization header and request body
+        - Web: Reads tokens from cookies
+        Both tokens are added to Redis blocklist for immediate revocation.
+        
+        Args:
+            request: Request object to access cookies.
+            response: Response object to delete cookies.
+            logout_input: Optional refresh token from request body (for mobile).
+            bearer_token: Optional access token from Authorization header (for mobile).
+        
+        Returns:
+            LogoutResponse confirming successful logout.
+        
+        Raises:
+            HTTPException: If no tokens found in either source.
+        """
+        
+        # Dual-auth: Extract tokens from bearer/body (mobile) or cookies (web)
+        if bearer_token:
+            # Mobile client: Access token in header, refresh token in body
+            access_token = bearer_token.credentials
+            refresh_token = logout_input.refresh_token
+        
+        else:
+            # Web client: Both tokens in cookies
+            access_token = request.cookies.get("access_token")
+            refresh_token = request.cookies.get("refresh_token")
+
+        if access_token == None and refresh_token == None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token missing"
+            )
+
+        # Revoke tokens by adding to Redis blocklist (prevents reuse)
+        if access_token:
+            await self.add_token_to_blocklist(access_token)
+        if refresh_token:
+            await self.add_token_to_blocklist(refresh_token)
+
+        # Delete cookies (harmless for mobile, necessary for web)
+        response.delete_cookie(key="access_token")
+        response.delete_cookie(key="refresh_token")
+        
+        return {
+            "success": True,
+            "message": "Logged out successfully",
+            "data": {}
+        }

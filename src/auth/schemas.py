@@ -31,7 +31,7 @@ class UserInput(BaseModel):
             raise ValueError('Password must contain at least one lowercase letter')
         if not re.search(r'[0-9]', value):
             raise ValueError('Password must contain at least one digit')
-        return v
+        return value  # Fixed: was 'v' instead of 'value'
 
 class LoginInput(BaseModel):
     """Payload for user login."""
@@ -105,6 +105,20 @@ class ForgotPasswordResponse(BaseModel):
 class ResetPasswordInput(BaseModel):
     new_password: str
     reset_token: str
+    
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, value: str):
+        """Validate new password strength (same requirements as signup)."""
+        if len(value) < 8:
+            raise ValueError("Password must have a minimum length of 8 characters")
+        if not re.search(r'[A-Z]', value):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', value):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'[0-9]', value):
+            raise ValueError('Password must contain at least one digit')
+        return value
  
 class RenewAccessTokenInput(BaseModel):
     refresh_token: str
