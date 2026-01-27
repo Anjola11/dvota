@@ -157,7 +157,7 @@ async def loginUser(
         value=user.get('access_token'),
         httponly=True,  # Prevents JavaScript access (XSS protection)
         secure=True,  # HTTPS only
-        samesite="Lax",  # CSRF protection
+        samesite="None",  # Required for cross-origin (Netlify -> Heroku)
         max_age = 60 * 60 * 2  # 2 hours
     )
     response.set_cookie(
@@ -165,7 +165,7 @@ async def loginUser(
         value=user.get('refresh_token'),
         httponly=True,
         secure=True,
-        samesite="Lax",
+        samesite="None",
         max_age = 60 * 60 * 24 * 3 #3 days
     )
    
@@ -264,73 +264,69 @@ async def renewAccessToken(
     bearer_token: HTTPAuthorizationCredentials = Depends(security),
     session: AsyncSession = Depends(get_Session) 
 ):
-    """Renew access token using refresh token with dual-auth support.
-    
-    Detects client type from refresh token source and responds accordingly:
-    - Web (cookies): Returns new tokens in cookies and empty response body
-    - Mobile (bearer): Returns new tokens in response body
-    
-    Args:
-        request: Request object to access cookie-based refresh tokens.
-        response: Response object to set new cookies for web clients.
-        bearer_token: Optional bearer token for mobile clients.
-        session: Database session.
-    
-    Returns:
-        RenewAccessTokenResponse with new tokens (format depends on client type).
-    
-    Raises:
-        HTTPException: If refresh token missing or invalid.
-    """
-    token = None
+    """Renew access token using refresh token with dual-auth support."""
+    try:
+        token = None
 
-    # Dual-auth: Extract refresh token from bearer header or cookies
-    bearer_raw = bearer_token.credentials if bearer_token else None
-    cookie_raw = request.cookies.get('refresh_token')
+        # Dual-auth: Extract refresh token from bearer header or cookies
+        bearer_raw = bearer_token.credentials if bearer_token else None
+        cookie_raw = request.cookies.get('refresh_token')
 
-    # Priority: Bearer token first, fallback to cookies
-    token = bearer_raw  or cookie_raw
-    if token == None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token missing"
-        )
+        # Priority: Bearer token first, fallback to cookies
+        token = bearer_raw  or cookie_raw
+        if token == None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token missing"
+            )
 
-    # Generate new access and refresh tokens (rotates refresh token for security)
-    new_token = await authServices.renewAccessToken(token, session)
+        # Generate new access and refresh tokens (rotates refresh token for security)
+        new_token = await authServices.renewAccessToken(token, session)
 
-    # Web client (cookie-based): Set new tokens in cookies
-    if cookie_raw and not bearer_raw:
+        # Web client (cookie-based): Set new tokens in cookies
+        if cookie_raw and not bearer_raw:
 
-        response.set_cookie(
-            key="access_token",
-            value=new_token.get('access_token'),
-            httponly=True,
-            secure=True,
-            samesite="Lax",
-            max_age=60 * 60 * 2  # 2 hours (matches token expiry)
-        )
-        response.set_cookie(
-            key="refresh_token",
-            value=new_token.get('refresh_token'),
-            httponly=True,
-            secure=True,
-            samesite="Lax",
-            max_age=60 * 60 * 24 * 3  # 3 days (matches token expiry)
-        )
-        # Return empty data; tokens delivered via cookies
+            response.set_cookie(
+                key="access_token",
+                value=new_token.get('access_token'),
+                httponly=True,
+                secure=True,
+                samesite="None",
+                max_age=60 * 60 * 2  # 2 hours (matches token expiry)
+            )
+            response.set_cookie(
+                key="refresh_token",
+                value=new_token.get('refresh_token'),
+                httponly=True,
+                secure=True,
+                samesite="None",
+                max_age=60 * 60 * 24 * 3  # 3 days (matches token expiry)
+            )
+            # Return empty data; tokens delivered via cookies
+            return {
+                "success": True,
+                "message": "access token renewed successfully",
+                "data": {}  # Empty body for web clients
+            }
+        
+        # Mobile client (bearer-based) or hybrid where bearer is provided: 
+        # Return tokens in response body
         return {
             "success": True,
             "message": "access token renewed successfully",
-            "data": {}  # Empty body for web clients
+            "data": new_token  # Contains access_token & refresh_token
         }
-    
-    # Mobile client (bearer-based) or hybrid where bearer is provided: 
-    # Return tokens in response body
-    return {
-        "success": True,
-        "message": "access token renewed successfully",
-        "data": new_token  # Contains access_token & refresh_token
-    }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        # Debug: Capture unexpected 500 errors and return detail
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Internal Server Error: {str(e)}",
+                "data": None
+            }
+        )
 
 

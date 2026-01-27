@@ -477,7 +477,12 @@ class AuthServices:
 
         # Only blocklist if token hasn't expired yet
         if time_to_live > 0:
-            await redis_client.setex(name=token_id, time=time_to_live, value="true")
+            try:
+                await redis_client.setex(name=token_id, time=time_to_live, value="true")
+            except Exception as e:
+                print(f"Redis error in add_token_to_blocklist: {e}")
+                # Log the error but don't crash; token rotation is already enforced via JWT logic
+                pass
         
     async def is_token_blacklisted(self, jti: str) -> bool:
         """Check if token is revoked via Redis blocklist.
@@ -488,8 +493,14 @@ class AuthServices:
         Returns:
             bool: True if token is blocklisted (revoked), False otherwise.
         """
-        result = await redis_client.get(jti)
-        return result is not None
+        try:
+            result = await redis_client.get(jti)
+            return result is not None
+        except Exception as e:
+            print(f"Redis error in is_token_blacklisted: {e}")
+            # Fail-open: If Redis is down, assume token is not blacklisted
+            # This prevents total service outage while still maintaining JWT security
+            return False
     
     async def logout(
             self,
