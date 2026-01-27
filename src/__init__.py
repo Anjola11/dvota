@@ -57,7 +57,8 @@ origins = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
     "https://dvota.netlify.app",
-    "https://dvota.vercel.app"
+    "https://dvota.vercel.app",
+    "https://dvota-backend-8e1684349b30.herokuapp.com"
 ]
 
 app.add_middleware(
